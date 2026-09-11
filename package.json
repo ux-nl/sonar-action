@@ -1,0 +1,14 @@
+{
+    "name": "sonar-action",
+    "version": "1.0.0",
+    "description": "Collect code-quality reports from a GitHub Actions workflow and send them to Sonar",
+    "private": true,
+    "type": "module",
+    "license": "MIT",
+    "engines": {
+        "node": ">=22"
+    },
+    "scripts": {
+        "test": "node --test"
+    }
+}

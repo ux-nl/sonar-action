@@ -1,0 +1,35 @@
+name: Sonar
+description: Collect code-quality reports produced by this workflow, write health.json and send them to Sonar.
+author: ux-nl
+branding:
+  icon: activity
+  color: blue
+
+inputs:
+  sonar-url:
+    description: Base URL of the Sonar instance, also used as the OIDC audience. An empty value makes the action skip with a warning.
+    required: true
+  reports-dir:
+    description: Directory (relative to the workspace) that holds the report files.
+    required: false
+    default: reports
+  workspace:
+    description: Path prefix recorded in the manifest so Sonar can make report paths repository-relative.
+    required: false
+    default: ${{ github.workspace }}
+  fail-on-error:
+    description: When "true", a failed upload or internal error fails this step. Default never fails the workflow.
+    required: false
+    default: 'false'
+
+outputs:
+  run-id:
+    description: The Sonar run id when the upload was accepted, empty otherwise.
+  manifest-path:
+    description: Absolute path of the written health.json.
+  status:
+    description: One of uploaded, skipped, failed.
+
+runs:
+  using: node24
+  main: src/main.js
