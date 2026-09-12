@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+      - run: npm test
+
+  self-test:
+    name: Run the action against a fake Sonar
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+      - name: Start fake Sonar
+        run: |
+          nohup node test/fake-sonar-server.js > fake-sonar.log 2>&1 &
+          for i in $(seq 1 20); do curl -s -o /dev/null http://127.0.0.1:8787/ && break; sleep 0.5; done
+      - id: sonar
+        uses: ./
+        with:
+          sonar-url: http://127.0.0.1:8787
+          reports-dir: test/fixtures/reports
+          workspace: ${{ github.workspace }}/test/fixtures/workspace
+          fail-on-error: 'true'
+      - name: Assert outputs
+        run: |
+          cat fake-sonar.log
+          test "${{ steps.sonar.outputs.status }}" = "uploaded"
+          test "${{ steps.sonar.outputs.run-id }}" = "1"
+          test -f test/fixtures/reports/health.json
+          grep -q '"phpstan.level": 8' test/fixtures/reports/sonar-metrics.json
