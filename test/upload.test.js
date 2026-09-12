@@ -100,3 +100,40 @@ test('a network error is retried once and then reported with status 0', async ()
     assert.deepEqual(result, { ok: false, status: 0, body: 'fetch failed', runId: null });
     assert.equal(attempts, 2);
 });
+
+test('a missing report file fails immediately without a retry', async () => {
+    let fetchCalls = 0;
+    const fetchImpl = async () => {
+        fetchCalls++;
+        throw new Error('should not be called');
+    };
+    let sleptCount = 0;
+    const sleep = async () => {
+        sleptCount++;
+    };
+
+    const missingReports = [{ name: 'phpstan', report: 'missing.json', format: 'phpstan-json' }];
+    const result = await uploadReports({ sonarUrl: 'http://127.0.0.1:9', token: 'jwt', reports: missingReports, ...workspace(), fetchImpl, sleep });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.status, 0);
+    assert.match(result.body, /ENOENT|no such file|unable to open/i);
+    assert.equal(fetchCalls, 0);
+    assert.equal(sleptCount, 0);
+});
+
+test('a body read failure is retried once and then reported', async () => {
+    let attempts = 0;
+    const slept = [];
+    const fetchImpl = async () => {
+        attempts++;
+        return { status: 202, text: async () => { throw new Error('read failed'); } };
+    };
+
+    const result = await uploadReports({ sonarUrl: 'http://127.0.0.1:9', token: 'jwt', reports, ...workspace(), fetchImpl, sleep: async (ms) => { slept.push(ms); } });
+
+    assert.equal(attempts, 2);
+    assert.deepEqual(slept, [10_000]);
+    assert.equal(result.ok, false);
+    assert.equal(result.body, 'read failed');
+});
