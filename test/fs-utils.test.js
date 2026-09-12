@@ -1,8 +1,10 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { readJson, peek } from '../src/fs-utils.js';
-import { tmpWorkspace } from './helpers.js';
+import { cleanupWorkspaces, tmpWorkspace } from './helpers.js';
+
+after(cleanupWorkspaces);
 
 test('readJson returns the parsed object for valid JSON', () => {
     const dir = tmpWorkspace({ 'report.json': '{"ok":true,"count":3}' });

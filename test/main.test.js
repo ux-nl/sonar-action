@@ -1,11 +1,15 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { run } from '../src/main.js';
-import { tmpWorkspace } from './helpers.js';
+import { cleanupWorkspaces, tmpWorkspace } from './helpers.js';
+
+after(cleanupWorkspaces);
 
 const fixtures = new URL('./fixtures/', import.meta.url);
+const repoRoot = path.resolve(import.meta.dirname, '..');
 
 function workspaceWithFixtures() {
     const dir = tmpWorkspace({ 'GITHUB_OUTPUT': '', 'GITHUB_STEP_SUMMARY': '' });
@@ -125,4 +129,49 @@ test('a GITHUB_OUTPUT that cannot be written does not fail the upload, only warn
 
     assert.equal(result.status, 'uploaded');
     assert.ok(logs.some((l) => l.startsWith('::warning::') && l.includes('GITHUB_OUTPUT')));
+});
+
+/** Builds the env for a real `node src/main.js` process: no OIDC vars, so it fails fast. */
+function entryPointEnv(dir, extra = {}) {
+    const env = {
+        ...process.env,
+        'INPUT_SONAR-URL': 'http://127.0.0.1:9',
+        'INPUT_REPORTS-DIR': 'reports',
+        'INPUT_WORKSPACE': dir,
+        GITHUB_REPOSITORY: 'ux-nl/sonar',
+        GITHUB_SHA: 'abc123',
+        GITHUB_REF_NAME: 'main',
+        GITHUB_EVENT_NAME: 'push',
+        GITHUB_RUN_ID: '4242',
+        GITHUB_OUTPUT: path.join(dir, 'GITHUB_OUTPUT'),
+        GITHUB_STEP_SUMMARY: path.join(dir, 'GITHUB_STEP_SUMMARY'),
+        ...extra,
+    };
+    delete env.ACTIONS_ID_TOKEN_REQUEST_URL;
+    delete env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+    return env;
+}
+
+test('the entry point exits 0 without fail-on-error and 1 with it, both annotating an ::error::', () => {
+    const withoutFailDir = workspaceWithFixtures();
+    const withoutFail = spawnSync(process.execPath, ['src/main.js'], {
+        env: entryPointEnv(withoutFailDir),
+        encoding: 'utf8',
+        cwd: repoRoot,
+    });
+
+    assert.equal(withoutFail.status, 0);
+    assert.match(withoutFail.stdout, /::error::/);
+    assert.match(readFileSync(path.join(withoutFailDir, 'GITHUB_OUTPUT'), 'utf8'), /^status=failed$/m);
+
+    const withFailDir = workspaceWithFixtures();
+    const withFail = spawnSync(process.execPath, ['src/main.js'], {
+        env: entryPointEnv(withFailDir, { 'INPUT_FAIL-ON-ERROR': 'true' }),
+        encoding: 'utf8',
+        cwd: repoRoot,
+    });
+
+    assert.equal(withFail.status, 1);
+    assert.match(withFail.stdout, /::error::/);
+    assert.match(readFileSync(path.join(withFailDir, 'GITHUB_OUTPUT'), 'utf8'), /^status=failed$/m);
 });

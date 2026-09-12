@@ -1,7 +1,9 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadVersions, versionFor } from '../src/versions.js';
-import { tmpWorkspace } from './helpers.js';
+import { cleanupWorkspaces, tmpWorkspace } from './helpers.js';
+
+after(cleanupWorkspaces);
 
 test('loadVersions reads composer.lock (both sections) and package-lock.json', () => {
     const versions = loadVersions(tmpWorkspace({

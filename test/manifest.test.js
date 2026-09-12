@@ -1,9 +1,11 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildManifest, writeManifest } from '../src/manifest.js';
-import { tmpWorkspace } from './helpers.js';
+import { cleanupWorkspaces, tmpWorkspace } from './helpers.js';
+
+after(cleanupWorkspaces);
 
 const context = { repository: 'ux-nl/sonar', sha: 'abc123', branch: 'main', workflowRunId: 42 };
 

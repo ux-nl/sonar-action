@@ -53,7 +53,18 @@ export function detectReports(reportsDir, { testTool }) {
 
     for (const name of readdirSync(reportsDir).sort()) {
         const file = path.join(reportsDir, name);
-        if (name.startsWith('.') || name.endsWith('.exit') || RESERVED.has(name) || !statSync(file).isFile()) {
+        if (name.startsWith('.') || name.endsWith('.exit') || RESERVED.has(name)) {
+            continue;
+        }
+
+        let stats;
+        try {
+            stats = statSync(file);
+        } catch {
+            // Dangling symlink or a file removed mid-scan; skip it.
+            continue;
+        }
+        if (!stats.isFile()) {
             continue;
         }
 

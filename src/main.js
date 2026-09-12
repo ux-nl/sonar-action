@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { detectReports, detectTestTool } from './detect.js';
 import { computeExtras, writeExtras } from './extras.js';
@@ -9,7 +9,12 @@ import { annotate, setOutput, summaryMarkdown, writeSummary } from './summary.js
 import { uploadReports } from './upload.js';
 import { loadVersions, versionFor } from './versions.js';
 
-const ACTION_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+let ACTION_VERSION;
+try {
+    ACTION_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+} catch {
+    ACTION_VERSION = 'unknown';
+}
 
 /**
  * Runs the whole pipeline. Never throws: every failure becomes status "failed"
@@ -35,7 +40,7 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
         }
 
         extras = computeExtras(inputs.workspace);
-        writeExtras(inputs.reportsDir, extras);
+        writeExtras(inputs.reportsDir, extras, log);
 
         ({ reports, unmatched } = detectReports(inputs.reportsDir, { testTool: detectTestTool(inputs.workspace) }));
 
@@ -93,7 +98,16 @@ function conclude(result, inputs, env, log, { reports, unmatched, extras }) {
     return result;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+let entryPath = process.argv[1];
+if (entryPath) {
+    try {
+        entryPath = realpathSync(entryPath);
+    } catch {
+        // Leave entryPath as given; a nonexistent path simply won't match below.
+    }
+}
+
+if (entryPath && import.meta.url === pathToFileURL(entryPath).href) {
     let result;
     try {
         result = await run();

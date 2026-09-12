@@ -1,9 +1,11 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { uploadReports } from '../src/upload.js';
-import { tmpWorkspace } from './helpers.js';
+import { cleanupWorkspaces, tmpWorkspace } from './helpers.js';
+
+after(cleanupWorkspaces);
 
 /** Starts a server whose handler receives a web Request and returns a Response. */
 async function withServer(handler, fn) {

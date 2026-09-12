@@ -1,9 +1,11 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import { detectReports, detectTestTool } from '../src/detect.js';
-import { tmpWorkspace } from './helpers.js';
+import { cleanupWorkspaces, tmpWorkspace } from './helpers.js';
+
+after(cleanupWorkspaces);
 
 const sarif = readFileSync(new URL('./fixtures/sarif/semgrep.sarif', import.meta.url), 'utf8');
 
@@ -76,6 +78,38 @@ test('maps every known filename to its format and default tool', () => {
     assert.deepEqual(unmatched, ['notes.md']);
 });
 
+test('maps every alternate filename in the RULES table to its format', () => {
+    const { reports } = detect({
+        'foo.lcov': 'TN:',
+        'phpunit-junit.xml': '<testsuites/>',
+        'infection-log.json': '{}',
+        'pest-type-coverage.json': '{}',
+        'pest-mutation.txt': 'Mutations: 10',
+        'artisan-about.json': '{}',
+        'pmd-cpd.xml': '<pmd-cpd/>',
+        'cobertura.xml': '<coverage line-rate="1"/>',
+    });
+
+    const expected = {
+        'foo.lcov': ['lcov', 'pest'],
+        'phpunit-junit.xml': ['junit', 'pest'],
+        'infection-log.json': ['infection-json', 'infection'],
+        'pest-type-coverage.json': ['pest-type-coverage', 'pest'],
+        'pest-mutation.txt': ['pest-mutation-text', 'pest'],
+        'artisan-about.json': ['artisan-about', 'artisan'],
+        'pmd-cpd.xml': ['pmd-cpd', 'cpd'],
+        'cobertura.xml': ['cobertura', 'pest'],
+    };
+
+    assert.equal(reports.length, Object.keys(expected).length);
+    for (const [file, [format, name]] of Object.entries(expected)) {
+        const report = byReport(reports, file);
+        assert.ok(report, `${file} detected`);
+        assert.equal(report.format, format, `${file} format`);
+        assert.equal(report.name, name, `${file} tool`);
+    }
+});
+
 test('disambiguates coverage.xml by content', () => {
     assert.equal(detect({ 'coverage.xml': '<?xml version="1.0"?><coverage generated="1"><project timestamp="1"/></coverage>' }).reports[0].format, 'clover');
     assert.equal(detect({ 'coverage.xml': '<?xml version="1.0"?><coverage line-rate="0.9" branch-rate="0.8"/>' }).reports[0].format, 'cobertura');
@@ -109,6 +143,16 @@ test('ignores directories, hidden files and an empty or missing directory', () =
     assert.deepEqual(reports, []);
     assert.deepEqual(unmatched, []);
     assert.deepEqual(detectReports(path.join(dir, 'missing'), { testTool: 'pest' }), { reports: [], unmatched: [] });
+});
+
+test('skips entries that cannot be stat\'ed, such as a dangling symlink', () => {
+    const dir = tmpWorkspace({ 'clover.xml': '<coverage><project/></coverage>' });
+    symlinkSync('/nonexistent', path.join(dir, 'broken.xml'));
+
+    const { reports, unmatched } = detectReports(dir, { testTool: 'pest' });
+
+    assert.deepEqual(reports.map((r) => r.report), ['clover.xml']);
+    assert.deepEqual(unmatched, []);
 });
 
 test('detectTestTool prefers pest, then phpunit, then vitest or jest, then tests', () => {
