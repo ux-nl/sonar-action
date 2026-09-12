@@ -1,5 +1,6 @@
 # Sonar golden workflow for a Laravel repository. Copy to .github/workflows/quality.yml.
 # Set the SONAR_URL repository (or organization) variable to your Sonar instance.
+# Change runs-on: self-hosted to ubuntu-latest if you do not use self-hosted runners.
 name: Quality
 
 on:

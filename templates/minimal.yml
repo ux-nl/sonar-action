@@ -16,6 +16,7 @@
     name: Sonar
     needs: [tests]
     if: always()
+    # Change runs-on: self-hosted to ubuntu-latest if you do not use self-hosted runners.
     runs-on: self-hosted
     permissions:
       id-token: write
