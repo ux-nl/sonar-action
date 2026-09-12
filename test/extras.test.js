@@ -1,9 +1,11 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { baselineCount, computeExtras, phpstanLevel, writeExtras } from '../src/extras.js';
-import { tmpWorkspace } from './helpers.js';
+import { cleanupWorkspaces, tmpWorkspace } from './helpers.js';
+
+after(cleanupWorkspaces);
 
 test('phpstanLevel reads numeric and max levels', () => {
     assert.equal(phpstanLevel('parameters:\n    level: 8\n    paths:\n        - app\n'), 8);
@@ -35,4 +37,15 @@ test('writeExtras writes nothing when there are no extras and no existing file',
 
     assert.equal(writeExtras(path.join(dir, 'reports'), {}), false);
     assert.equal(existsSync(path.join(dir, 'reports/sonar-metrics.json')), false);
+});
+
+test('writeExtras leaves an unparseable existing sonar-metrics.json untouched and warns', () => {
+    const dir = tmpWorkspace({ 'reports/sonar-metrics.json': '{not json' });
+    const logs = [];
+
+    const wrote = writeExtras(path.join(dir, 'reports'), { 'phpstan.level': 6 }, (l) => logs.push(l));
+
+    assert.equal(wrote, false);
+    assert.equal(readFileSync(path.join(dir, 'reports/sonar-metrics.json'), 'utf8'), '{not json');
+    assert.ok(logs.some((l) => l.startsWith('::warning::') && l.includes('not valid JSON')));
 });

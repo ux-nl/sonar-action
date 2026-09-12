@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { readJson } from './fs-utils.js';
+import { annotate } from './summary.js';
 
 const PHPSTAN_CONFIGS = ['phpstan.neon', 'phpstan.neon.dist', 'phpstan.dist.neon'];
 
@@ -58,12 +59,15 @@ export function baselineCount(neon) {
 
 /**
  * Merges extras into reports/sonar-metrics.json. Keys already present in the
- * file win, so a workflow can override anything the action derives.
+ * file win, so a workflow can override anything the action derives. When an
+ * existing file cannot be parsed as JSON, it is left untouched (rather than
+ * clobbered) so Sonar's server can report the parse error itself.
  * @param {string} reportsDir
  * @param {Record<string, number>} extras
+ * @param {(line: string) => void} log
  * @returns {boolean} whether the file was written
  */
-export function writeExtras(reportsDir, extras) {
+export function writeExtras(reportsDir, extras, log = console.log) {
     const file = path.join(reportsDir, 'sonar-metrics.json');
     const exists = existsSync(file);
 
@@ -71,7 +75,15 @@ export function writeExtras(reportsDir, extras) {
         return false;
     }
 
-    const existing = exists ? (readJson(file) ?? {}) : {};
+    let existing = {};
+    if (exists) {
+        existing = readJson(file);
+        if (existing === null) {
+            annotate('warning', 'sonar-action: reports/sonar-metrics.json exists but is not valid JSON; leaving it untouched', log);
+            return false;
+        }
+    }
+
     writeFileSync(file, `${JSON.stringify({ ...extras, ...existing }, null, 2)}\n`);
 
     return true;
