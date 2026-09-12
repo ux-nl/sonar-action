@@ -115,3 +115,14 @@ test('an OIDC failure is reported as failed with the permission hint', async () 
     assert.equal(result.status, 'failed');
     assert.match(result.error, /id-token: write/);
 });
+
+test('a GITHUB_OUTPUT that cannot be written does not fail the upload, only warns', async () => {
+    const dir = workspaceWithFixtures();
+    const { fetchImpl } = fakeFetch();
+    const logs = [];
+
+    const result = await run({ env: envFor(dir, { GITHUB_OUTPUT: '/nonexistent-dir/out' }), fetchImpl, log: (l) => logs.push(l) });
+
+    assert.equal(result.status, 'uploaded');
+    assert.ok(logs.some((l) => l.startsWith('::warning::') && l.includes('GITHUB_OUTPUT')));
+});

@@ -27,11 +27,11 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
 
     try {
         if (inputs.sonarUrl === '') {
-            return skip(result, 'sonar-url is empty (is the SONAR_URL repository variable set?)', env, log);
+            return skip(result, 'sonar-url is empty (is the SONAR_URL repository variable set?)', inputs, env, log);
         }
 
         if (!existsSync(inputs.reportsDir)) {
-            return skip(result, `reports directory ${inputs.reportsDir} does not exist`, env, log);
+            return skip(result, `reports directory ${inputs.reportsDir} does not exist`, inputs, env, log);
         }
 
         extras = computeExtras(inputs.workspace);
@@ -40,7 +40,7 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
         ({ reports, unmatched } = detectReports(inputs.reportsDir, { testTool: detectTestTool(inputs.workspace) }));
 
         if (reports.length === 0) {
-            return skip(result, `no recognised report files in ${inputs.reportsDir}`, env, log);
+            return skip(result, `no recognised report files in ${inputs.reportsDir}`, inputs, env, log);
         }
 
         const versions = loadVersions(inputs.workspace);
@@ -67,30 +67,40 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
         annotate('error', `sonar-action: ${result.error}`, log);
     }
 
-    writeSummary(summaryMarkdown({ status: result.status, runId: result.runId, sonarUrl: inputs.sonarUrl, reports, unmatched, extras, error: result.error }), env);
-
-    return finish(result, env);
+    return conclude(result, inputs, env, log, { reports, unmatched, extras });
 }
 
-function skip(result, reason, env, log) {
+function skip(result, reason, inputs, env, log) {
     result.status = 'skipped';
     result.error = reason;
     annotate('warning', `sonar-action: ${reason}; nothing to report.`, log);
-    writeSummary(summaryMarkdown({ status: 'skipped', runId: null, sonarUrl: '', reports: [], unmatched: [], extras: {}, error: reason }), env);
 
-    return finish(result, env);
+    return conclude(result, inputs, env, log, { reports: [], unmatched: [], extras: {} });
 }
 
-function finish(result, env) {
-    setOutput('status', result.status, env);
-    setOutput('run-id', result.runId === null ? '' : String(result.runId), env);
-    setOutput('manifest-path', result.manifestPath, env);
+/**
+ * Writes the step summary and the action outputs. Both are best-effort (they
+ * never throw), so this is safe to call as the unconditional tail of every
+ * path through `run()`.
+ */
+function conclude(result, inputs, env, log, { reports, unmatched, extras }) {
+    writeSummary(summaryMarkdown({ status: result.status, runId: result.runId, sonarUrl: inputs.sonarUrl, reports, unmatched, extras, error: result.error }), env, log);
+
+    setOutput('status', result.status, env, log);
+    setOutput('run-id', result.runId === null ? '' : String(result.runId), env, log);
+    setOutput('manifest-path', result.manifestPath, env, log);
 
     return result;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-    const result = await run();
+    let result;
+    try {
+        result = await run();
+    } catch (error) {
+        annotate('error', `sonar-action: ${error instanceof Error ? error.message : String(error)}`, console.log);
+        result = { status: 'failed' };
+    }
 
     if (result.status === 'failed' && readInputs().failOnError) {
         process.exitCode = 1;

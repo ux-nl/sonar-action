@@ -1,18 +1,26 @@
 import { appendFileSync } from 'node:fs';
 
 /**
+ * Appends a `name=value` line to GITHUB_OUTPUT. Never throws: a failure
+ * writing the file is reported as a warning annotation instead.
  * @param {string} name
  * @param {string} value
  * @param {NodeJS.ProcessEnv} env
+ * @param {(line: string) => void} log
  */
-export function setOutput(name, value, env = process.env) {
-    if (env.GITHUB_OUTPUT) {
+export function setOutput(name, value, env = process.env, log = console.log) {
+    if (!env.GITHUB_OUTPUT) {
+        return;
+    }
+    try {
         appendFileSync(env.GITHUB_OUTPUT, `${name}=${value}\n`);
+    } catch (error) {
+        annotate('warning', `sonar-action: could not write GITHUB_OUTPUT: ${error instanceof Error ? error.message : String(error)}`, log);
     }
 }
 
 /**
- * Emits a workflow command annotation.
+ * Emits a workflow command annotation. Never throws.
  * @param {'warning'|'error'|'notice'} level
  * @param {string} message
  * @param {(line: string) => void} log
@@ -22,12 +30,20 @@ export function annotate(level, message, log = console.log) {
 }
 
 /**
+ * Appends markdown to GITHUB_STEP_SUMMARY. Never throws: a failure writing
+ * the file is reported as a warning annotation instead.
  * @param {string} markdown
  * @param {NodeJS.ProcessEnv} env
+ * @param {(line: string) => void} log
  */
-export function writeSummary(markdown, env = process.env) {
-    if (env.GITHUB_STEP_SUMMARY) {
+export function writeSummary(markdown, env = process.env, log = console.log) {
+    if (!env.GITHUB_STEP_SUMMARY) {
+        return;
+    }
+    try {
         appendFileSync(env.GITHUB_STEP_SUMMARY, `${markdown}\n`);
+    } catch (error) {
+        annotate('warning', `sonar-action: could not write GITHUB_STEP_SUMMARY: ${error instanceof Error ? error.message : String(error)}`, log);
     }
 }
 
