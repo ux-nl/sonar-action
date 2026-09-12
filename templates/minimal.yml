@@ -1,0 +1,37 @@
+# Sonar: add this job to an existing workflow.
+#
+# Every job that produces reports must write them into reports/ and upload
+# them as an artifact named reports-<job> (see the example below), so this
+# final job can merge them, write health.json and send everything to Sonar.
+#
+#   - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+#     if: always()
+#     with:
+#       name: reports-tests
+#       path: reports/
+#
+# Set the SONAR_URL repository (or organization) variable to your Sonar instance.
+
+  sonar:
+    name: Sonar
+    needs: [tests]
+    if: always()
+    runs-on: self-hosted
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: reports-*
+          path: reports
+          merge-multiple: true
+      - uses: ux-nl/sonar-action@SONAR_ACTION_SHA # v1.0.0
+        with:
+          sonar-url: ${{ vars.SONAR_URL }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: sonar-reports
+          path: reports/

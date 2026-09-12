@@ -1,0 +1,177 @@
+# Sonar golden workflow for a Laravel repository. Copy to .github/workflows/quality.yml.
+# Set the SONAR_URL repository (or organization) variable to your Sonar instance.
+name: Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  PHP_VERSION: '8.4'
+
+jobs:
+  lint:
+    name: Pint
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: mkdir -p reports
+      - run: vendor/bin/pint --test --format=checkstyle > reports/pint.xml; echo $? > reports/pint.xml.exit
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-lint
+          path: reports/
+      - run: vendor/bin/pint --test
+
+  static:
+    name: PHPStan and type coverage
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: mkdir -p reports
+      - run: vendor/bin/phpstan analyse --no-progress --error-format=json > reports/phpstan.json; echo $? > reports/phpstan.json.exit
+        continue-on-error: true
+      - run: vendor/bin/pest --type-coverage --type-coverage-json=reports/type-coverage.json; echo $? > reports/type-coverage.json.exit
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-static
+          path: reports/
+      - run: vendor/bin/phpstan analyse --no-progress --error-format=github
+
+  rector:
+    name: Rector
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: mkdir -p reports
+      - run: vendor/bin/rector process --dry-run --output-format=json > reports/rector.json; echo $? > reports/rector.json.exit
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-rector
+          path: reports/
+
+  tests:
+    name: Pest
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, intl, gd, fileinfo
+          coverage: pcov
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env && php artisan key:generate
+      - run: mkdir -p reports
+      - run: vendor/bin/pest --ci --coverage --coverage-clover=reports/clover.xml --log-junit=reports/junit.xml; echo $? > reports/junit.xml.exit
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-tests
+          path: reports/
+      - run: test "$(cat reports/junit.xml.exit)" = "0"
+
+  security:
+    name: Security
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: hashFiles('package-lock.json') != ''
+        with:
+          node-version: '22'
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: mkdir -p reports
+      - run: composer audit --format=json --no-interaction > reports/composer-audit.json; echo $? > reports/composer-audit.json.exit
+        continue-on-error: true
+      - run: npm audit --json > reports/npm-audit.json; echo $? > reports/npm-audit.json.exit
+        if: hashFiles('package-lock.json') != ''
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-security
+          path: reports/
+
+  dependencies:
+    name: Dependency health
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: hashFiles('package-lock.json') != ''
+        with:
+          node-version: '22'
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env && php artisan key:generate
+      - run: mkdir -p reports
+      - run: composer outdated --direct --format=json --no-interaction > reports/composer-outdated.json
+        continue-on-error: true
+      - run: npm ci --ignore-scripts && (npm outdated --json > reports/npm-outdated.json || true)
+        if: hashFiles('package-lock.json') != ''
+        continue-on-error: true
+      - run: php artisan about --json > reports/about.json
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-dependencies
+          path: reports/
+
+  sonar:
+    name: Sonar
+    needs: [lint, static, rector, tests, security, dependencies]
+    if: always()
+    runs-on: self-hosted
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: reports-*
+          path: reports
+          merge-multiple: true
+      - uses: ux-nl/sonar-action@SONAR_ACTION_SHA # v1.0.0
+        with:
+          sonar-url: ${{ vars.SONAR_URL }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: sonar-reports
+          path: reports/
