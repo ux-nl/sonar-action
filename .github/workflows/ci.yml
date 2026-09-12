@@ -38,7 +38,7 @@ jobs:
         uses: ./
         with:
           sonar-url: http://127.0.0.1:8787
-          reports-dir: test/fixtures/reports
+          reports-dir: ${{ github.workspace }}/test/fixtures/reports
           workspace: ${{ github.workspace }}/test/fixtures/workspace
           fail-on-error: 'true'
       - name: Assert outputs
