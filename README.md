@@ -18,7 +18,7 @@ The action does **not** run any tools. Your jobs run PHPStan, Pest, Pint and fri
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with: { pattern: reports-*, path: reports, merge-multiple: true }
-      - uses: ux-nl/sonar-action@<sha> # v1
+      - uses: ux-nl/sonar-action@90202b9a87508102da761e726f057558695451c0 # v1.0.0
         with:
           sonar-url: ${{ vars.SONAR_URL }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
