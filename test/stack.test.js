@@ -180,6 +180,8 @@ test('lowestPhpMinor picks the lowest lower bound and ignores upper bounds', () 
     assert.equal(lowestPhpMinor('~8.2.0'), '8.2');
     assert.equal(lowestPhpMinor('^7.4 || ^8.0'), '7.4');
     assert.equal(lowestPhpMinor('^8'), '8.0');
+    assert.equal(lowestPhpMinor('8.*'), '8.0');
+    assert.equal(lowestPhpMinor('8.x'), '8.0');
     assert.equal(lowestPhpMinor('*'), null);
     assert.equal(lowestPhpMinor(''), null);
 });
@@ -189,6 +191,7 @@ test('lowestNodeMajor picks the lowest lower bound major', () => {
     assert.equal(lowestNodeMajor('^20.10.0'), '20');
     assert.equal(lowestNodeMajor('18 || 20'), '18');
     assert.equal(lowestNodeMajor('>=18 <23'), '18');
+    assert.equal(lowestNodeMajor('20.*'), '20');
     assert.equal(lowestNodeMajor('*'), null);
 });
 
@@ -199,6 +202,9 @@ test('highestPhpMinor picks the highest satisfying minor, capped at the default'
     assert.equal(highestPhpMinor('~8.2.0'), '8.2');
     assert.equal(highestPhpMinor('*'), '8.4');
     assert.equal(highestPhpMinor(''), '8.4');
+    // A bare "major.*"/"major.x" has an unbounded minor, like "^major", not a pin at ".0".
+    assert.equal(highestPhpMinor('8.*'), '8.4');
+    assert.equal(highestPhpMinor('8.x'), '8.4');
 });
 
 test('highestNodeMajor picks the highest satisfying major, capped at the default', () => {
@@ -207,6 +213,8 @@ test('highestNodeMajor picks the highest satisfying major, capped at the default
     assert.equal(highestNodeMajor('18 || 20'), '20');
     assert.equal(highestNodeMajor('>=18 <23'), '22');
     assert.equal(highestNodeMajor('*'), '22');
+    assert.equal(highestNodeMajor('20.*'), '20');
+    assert.equal(highestNodeMajor('20.x'), '20');
 });
 
 test('php-version output is the highest allowed minor; the declared runtime keeps the floor', () => {

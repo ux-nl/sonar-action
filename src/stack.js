@@ -208,13 +208,14 @@ function prevMinor({ major, minor }) {
  * @returns {{ lower: { major: number, minor: number }, upperExclusive: { major: number, minor: number } } | null}
  */
 function parseToken(token) {
-    const match = token.match(/^(<=|>=|<|>|\^|~|=)?v?(\d+)(?:\.(\d+))?(?:\.(\d+|\*|x))?$/i);
+    const match = token.match(/^(<=|>=|<|>|\^|~|=)?v?(\d+)(?:\.(\d+|\*|x))?(?:\.(\d+|\*|x))?$/i);
     if (!match) {
         return null;
     }
-    const [, op, majorStr, minorStr, patchStr] = match;
+    const [, op, majorStr, minorRaw, patchStr] = match;
     const major = Number(majorStr);
-    const minor = minorStr === undefined ? 0 : Number(minorStr);
+    const minorWildcard = minorRaw !== undefined && /^[*x]$/i.test(minorRaw);
+    const minor = minorRaw === undefined || minorWildcard ? 0 : Number(minorRaw);
     const patchGiven = patchStr !== undefined && !/^[*x]$/i.test(patchStr);
 
     switch (op) {
@@ -230,12 +231,15 @@ function parseToken(token) {
             return { lower: { major, minor }, upperExclusive: { major: major + 1, minor: 0 } };
         case '~':
             // ~X.Y.Z restricts to the same minor; ~X or ~X.Y behaves like ^X.
-            return minorStr !== undefined && patchGiven
+            return minorRaw !== undefined && !minorWildcard && patchGiven
                 ? { lower: { major, minor }, upperExclusive: { major, minor: minor + 1 } }
                 : { lower: { major, minor }, upperExclusive: { major: major + 1, minor: 0 } };
         default:
-            // exact pin, with or without a wildcard patch: a single minor
-            return { lower: { major, minor }, upperExclusive: { major, minor: minor + 1 } };
+            // exact pin, with or without a wildcard patch: a single minor.
+            // A wildcard minor ("8.*", "8.x") is unbounded within the major, like ^X.
+            return minorWildcard
+                ? { lower: { major, minor: 0 }, upperExclusive: { major: major + 1, minor: 0 } }
+                : { lower: { major, minor }, upperExclusive: { major, minor: minor + 1 } };
     }
 }
 

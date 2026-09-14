@@ -326,7 +326,7 @@ jobs:
       - run: npx vitest run --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml --coverage --coverage.reporter=lcov --coverage.reportsDirectory=reports/coverage; echo $? > reports/vitest-junit.xml.exit
         if: needs.detect.outputs.vitest == 'true'
         continue-on-error: true
-      - run: npx jest --ci --reporters=default --reporters=jest-junit --coverage --coverageReporters=lcov --coverageDirectory=reports/coverage; echo $? > reports/vitest-junit.xml.exit
+      - run: npx jest --ci --reporters=default --reporters=jest-junit --coverage --coverageReporters=lcov --coverageDirectory=reports/coverage; echo $? > reports/jest-junit.xml.exit
         if: needs.detect.outputs.vitest != 'true'
         env:
           JEST_JUNIT_OUTPUT_DIR: reports
@@ -339,7 +339,8 @@ jobs:
           name: reports-js-tests
           path: reports/
           if-no-files-found: ignore
-      - run: test "$(cat reports/vitest-junit.xml.exit)" = "0"
+      # exactly one of vitest/jest ran, so exactly one *-junit.xml.exit sidecar exists
+      - run: for f in reports/*-junit.xml.exit; do test "$(cat "$f")" = "0"; done
 
   js-unused:
     name: Knip
