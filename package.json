@@ -1,6 +1,6 @@
 {
     "name": "sonar-action",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Collect code-quality reports from a GitHub Actions workflow and send them to Sonar",
     "private": true,
     "type": "module",
