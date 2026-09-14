@@ -23,8 +23,9 @@ permissions:
 jobs:
   sonar:
     uses: ux-nl/sonar-action/.github/workflows/sonar.yml@<sha> # v1.1.0
-    secrets: inherit
 ```
+
+The reusable workflow declares no secrets, so the caller passes none: it authenticates to Sonar with the run's OIDC token, which is why the caller needs `id-token: write`. Optional `secrets:` will be declared explicitly if a private package registry ever needs credentials.
 
 It runs on every push to the default branch and on demand (Actions tab, `gh workflow run sonar.yml`, or Sonar's "Run scan" button). There is no schedule. Everything runs on `ubuntu-latest`.
 
@@ -37,13 +38,14 @@ The reusable workflow detects the stack and runs only what applies:
 | `detect` | always | `sonar-stack.json` |
 | `inventory` | always | `sbom.cdx.json` (syft, CycloneDX) |
 | `secrets` | always | `gitleaks.sarif` (report only) |
-| `lint`, `static`, `rector`, `tests`, `security`, `dependencies` | `composer.json` present and the tool installed | Pint, PHPStan, Rector, Pest/PHPUnit, composer audit/outdated, `artisan about` |
-| `js-lint`, `js-tests`, `js-unused` | `package.json` present and the tool installed | ESLint SARIF, Vitest/Jest JUnit and lcov, knip |
+| `lint`, `static`, `rector`, `tests` | `composer.json` present and the tool installed | Pint, PHPStan, Rector, Pest/PHPUnit |
+| `security`, `dependencies` | `composer.json` or `package.json` present | composer/npm audit and outdated, `artisan about` |
+| `js-lint`, `js-tests`, `js-unused` | `package.json` present and the tool installed | ESLint SARIF, Vitest/Jest JUnit and `<runner>-lcov.info`, knip |
 | `sonar` | always | `health.json`, upload |
 
 `lint`, `static` and `tests` fail the workflow on Pint/PHPStan findings or Pest/PHPUnit failures; `js-lint` and `js-tests` do the same for ESLint findings and Vitest/Jest failures. `rector`, `security`, `dependencies`, `js-unused` and `secrets` are report-only and never fail the workflow — `secrets` runs gitleaks as a pinned release binary rather than the `gitleaks-action`, which needs an organization license. Every job uploads its `reports-<job>` artifact with `if-no-files-found: ignore`, so a job that produced nothing still lets the workflow continue.
 
-The final `sonar` job always runs (`if: always()`). Like the action itself, it never fails your workflow when the upload to Sonar fails (`fail-on-error: false` by default) — the reports already uploaded per job, plus the `sonar-reports` fallback artifact, are how Sonar's GitHub App recovers.
+The final `sonar` job runs unless the whole workflow was cancelled (`if: !cancelled()`), so a failing job still gets its reports uploaded. Like the action itself, it never fails your workflow when the upload to Sonar fails (`fail-on-error: false` by default) — the reports already uploaded per job, plus the `sonar-reports` fallback artifact, are how Sonar's GitHub App recovers.
 
 > Until the Sonar server understands the `cyclonedx-json` and `sonar-stack` report formats this release introduces, the `sonar` job's upload is answered with `422` for every v1.1 caller; the workflow run itself still completes and is visible in the Actions log.
 
@@ -53,7 +55,7 @@ The final `sonar` job always runs (`if: always()`). Like the action itself, it n
 |---|---|---|
 | `php-version` | detected (`composer.lock`'s exact platform override when present, else highest minor satisfying `require.php`, capped at 8.4), else `8.4` | Version for setup-php. |
 | `node-version` | detected (`.nvmrc` major when pinned, else highest major satisfying `engines.node`, capped at 22), else `22` | Version for setup-node. |
-| `skip` | empty | Comma-separated job names to skip, e.g. `rector,tests`. |
+| `skip` | empty | Comma-separated job ids to skip, e.g. `rector, tests` (spaces are ignored): `inventory`, `secrets`, `lint`, `static` (the PHPStan job), `rector`, `tests`, `security`, `dependencies`, `js-lint`, `js-tests`, `js-unused`. `detect` and `sonar` always run. |
 | `sonar-url` | action default | Only when running your own Sonar instance. |
 
 ### Adding the `sonar` job to an existing workflow
@@ -112,7 +114,7 @@ The `php-version`/`node-version` outputs (also used as the reusable workflow's i
 |---|---|---|
 | `clover.xml`, `coverage.xml` (Clover) | `clover` | test runner |
 | `cobertura.xml`, `coverage.xml` (Cobertura) | `cobertura` | test runner |
-| `lcov.info`, `*.lcov` | `lcov` | test runner |
+| `lcov.info`, `*-lcov.info`, `*.lcov` | `lcov` | test runner; `<tool>-lcov.info` names the tool |
 | `junit.xml`, `*-junit.xml` | `junit` | test runner; `<tool>-junit.xml` names the tool |
 | `*.sarif`, `*.sarif.json` | `sarif` | driver name from the file |
 | `phpstan.json` | `phpstan-json` | phpstan |
@@ -133,7 +135,7 @@ The `php-version`/`node-version` outputs (also used as the reusable workflow's i
 | `sonar-stack.json` | `sonar-stack` | sonar (written by the `detect` action) |
 | `sonar-metrics.json` | `sonar-metrics` | sonar |
 
-The test runner is `pest` when `composer.json` requires `pestphp/pest`, otherwise `phpunit` for PHP projects, `vitest` or `jest` for Node projects. Unknown files are listed in the step summary and ignored. A sidecar `<report>.exit` file containing an integer records the tool's exit code (`vendor/bin/phpstan analyse --error-format=json > reports/phpstan.json; echo $? > reports/phpstan.json.exit`).
+The test runner is `pest` when `composer.json` requires `pestphp/pest`, otherwise `phpunit` for PHP projects, `vitest` or `jest` for Node projects. Unknown files are listed in the step summary and ignored. A sidecar `<report>.exit` file containing an integer records the tool's exit code (`set +e; vendor/bin/phpstan analyse --error-format=json > reports/phpstan.json; echo $? > reports/phpstan.json.exit` — the `set +e` matters, because the default shell is `bash -e` and would abort the step before the sidecar is written).
 
 ## Derived metrics
 

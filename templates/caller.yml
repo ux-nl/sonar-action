@@ -16,4 +16,3 @@ permissions:
 jobs:
   sonar:
     uses: ux-nl/sonar-action/.github/workflows/sonar.yml@<sha> # v1.1.0
-    secrets: inherit

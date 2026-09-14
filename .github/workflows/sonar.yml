@@ -20,7 +20,7 @@ on:
         required: false
         default: ''
       skip:
-        description: Comma-separated job names to skip, e.g. "rector,tests".
+        description: 'Comma-separated job ids to skip, spaces ignored, e.g. "rector, tests": inventory, secrets, lint, static (PHPStan), rector, tests, security, dependencies, js-lint, js-tests, js-unused.'
         type: string
         required: false
         default: ''
