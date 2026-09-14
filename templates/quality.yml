@@ -1,6 +1,6 @@
-# Sonar golden workflow for a Laravel repository. Copy to .github/workflows/quality.yml.
-# The action sends to https://sonar.ux.nl; pass `sonar-url` under `with:` to use another instance.
-# Change runs-on: self-hosted to ubuntu-latest if you do not use self-hosted runners.
+# DEPRECATED: use templates/caller.yml, which calls the reusable workflow in this repository
+# (.github/workflows/sonar.yml) and works for any stack. This file is kept for one release and
+# will be removed in v2. It also still says self-hosted; every ux-nl repository runs on ubuntu-latest.
 name: Quality
 
 on:
