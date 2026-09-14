@@ -137,7 +137,8 @@ export function lowestNodeMajor(constraint) {
  * (`<`, `<=`) are honoured and alternatives (`||`) are evaluated independently.
  * Falls back to the cap when the constraint has no upper bound, is empty, or
  * is `*`; never returns lower than the constraint's own lower bound, even
- * when that lower bound is itself past the cap.
+ * when that lower bound is itself past the cap. A constraint that is unbounded
+ * inside a major below the cap (`^7.4`) reports that lower bound (`7.4`).
  * @param {string} constraint
  * @returns {string}
  */
@@ -248,7 +249,8 @@ function parseToken(token) {
  * `cap`. Alternatives (`||`) are evaluated independently and the best one
  * wins; space/comma-separated tokens within one alternative are intersected
  * (composer's AND). Constraints with no parseable token (`*`, empty) resolve
- * to `cap`.
+ * to `cap`. The winning alternative's lower bound travels with its candidate
+ * so an unbounded minor can fall back to it instead of to `.0`.
  * @param {string} constraint
  * @param {{ major: number, minor: number }} cap
  * @returns {{ major: number, minor: number }}
@@ -280,15 +282,24 @@ function highestSatisfying(constraint, cap) {
         if (compareVer(lower, candidate) > 0) {
             candidate = lower;
         }
-        best = best === null ? candidate : maxVer(best, candidate);
+        if (best === null || compareVer(candidate, best.candidate) > 0) {
+            best = { candidate, lower };
+        }
     }
 
     if (best === null) {
         return cap;
     }
-    // An unbounded minor within a major (e.g. a lone `^7.4` below the cap's
-    // major) has no real highest minor to report; fall back to `.0`.
-    return { major: best.major, minor: best.minor === Infinity ? 0 : best.minor };
+    if (best.candidate.minor !== Infinity) {
+        return best.candidate;
+    }
+    // An unbounded minor within a major (e.g. `^7.4` while the cap is 8.4) has no
+    // real highest minor to report: every minor of that major satisfies the
+    // constraint. Report the alternative's own lower bound rather than dropping
+    // to `.0`, which would resolve `^7.4` to an excluded 7.0.
+    const { major } = best.candidate;
+    const onSameMajor = best.lower.major === major && Number.isFinite(best.lower.minor);
+    return { major, minor: onSameMajor ? best.lower.minor : 0 };
 }
 
 /**
@@ -391,9 +402,11 @@ function nodePackageIndex(workspace, pkg) {
         return { manager: 'yarn', has: (name) => new RegExp(`^"?${escapeRegExp(name)}@`, 'm').test(text) };
     }
 
+    // lockfileVersion 1 has no `packages` map (only a nested `dependencies` tree),
+    // so fall through to package.json rather than reporting no packages at all.
     const npm = readJson(path.join(workspace, 'package-lock.json'));
-    if (npm) {
-        return { manager: 'npm', has: (name) => `node_modules/${name}` in (npm.packages ?? {}) };
+    if (npm?.packages) {
+        return { manager: 'npm', has: (name) => `node_modules/${name}` in npm.packages };
     }
 
     const declared = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };

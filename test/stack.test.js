@@ -207,6 +207,16 @@ test('highestPhpMinor picks the highest satisfying minor, capped at the default'
     assert.equal(highestPhpMinor('8.x'), '8.4');
 });
 
+test('highestPhpMinor keeps the lower bound when the whole major sits below the cap', () => {
+    // Every 7.x from the lower bound up satisfies these, and none of them is
+    // installable as 7.0; the lower bound is the only honest answer.
+    assert.equal(highestPhpMinor('^7.4'), '7.4');
+    assert.equal(highestPhpMinor('~7.2'), '7.2');
+    assert.equal(highestPhpMinor('>=7.4 <8.0'), '7.4');
+    assert.equal(highestPhpMinor('^6.0'), '6.0');
+    assert.equal(highestPhpMinor('^7.4 || ^8.2'), '8.4');
+});
+
 test('highestNodeMajor picks the highest satisfying major, capped at the default', () => {
     assert.equal(highestNodeMajor('>=18'), '22');
     assert.equal(highestNodeMajor('^20.10.0'), '20');
@@ -215,6 +225,32 @@ test('highestNodeMajor picks the highest satisfying major, capped at the default
     assert.equal(highestNodeMajor('*'), '22');
     assert.equal(highestNodeMajor('20.*'), '20');
     assert.equal(highestNodeMajor('20.x'), '20');
+    assert.equal(highestNodeMajor('^18.0.0'), '18');
+    assert.equal(highestNodeMajor('^16'), '16');
+});
+
+test('engines.node below the cap installs that major', () => {
+    const result = detectStack(tmpWorkspace({
+        'package.json': JSON.stringify({ private: true, engines: { node: '^16' } }),
+    }));
+
+    assert.equal(result.nodeVersion, '16');
+    assert.equal(result.runtimes.node, '16');
+});
+
+test('npm lockfileVersion 1 has no packages map: flags fall back to package.json', () => {
+    const result = detectStack(tmpWorkspace({
+        'package.json': JSON.stringify({ private: true, devDependencies: { vitest: '^3.0.0', eslint: '^9.0.0' } }),
+        'package-lock.json': JSON.stringify({
+            name: 'legacy', lockfileVersion: 1,
+            dependencies: { vitest: { version: '3.0.5', dev: true }, eslint: { version: '9.10.0', dev: true } },
+        }),
+    }));
+
+    assert.equal(result.packageManagers.node, 'npm');
+    assert.equal(result.flags.vitest, true);
+    assert.equal(result.flags.eslint, true);
+    assert.equal(result.flags.jest, false);
 });
 
 test('php-version output is the highest allowed minor; the declared runtime keeps the floor', () => {
