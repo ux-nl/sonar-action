@@ -74,3 +74,23 @@ test('runDetect on an empty checkout still writes the report with kind other', (
     assert.equal(JSON.parse(readFileSync(file, 'utf8')).kind, 'other');
     assert.equal(outputs(path.join(dir, 'GITHUB_OUTPUT')).kind, 'other');
 });
+
+test('runDetect never fails the step when the report file cannot be written', () => {
+    const dir = tmpWorkspace({
+        // A regular file at the reports-dir path prevents mkdirSync from creating it.
+        reports: 'not a directory',
+        GITHUB_OUTPUT: '',
+    });
+    const logs = [];
+
+    const result = runDetect({
+        env: { INPUT_WORKSPACE: dir, 'INPUT_REPORTS-DIR': 'reports', GITHUB_OUTPUT: path.join(dir, 'GITHUB_OUTPUT') },
+        log: (line) => logs.push(line),
+    });
+
+    assert.ok(result);
+    const out = outputs(path.join(dir, 'GITHUB_OUTPUT'));
+    assert.equal(out.kind, 'other');
+    assert.equal(out.php, 'false');
+    assert.ok(logs.some((line) => line.startsWith('::warning::')));
+});

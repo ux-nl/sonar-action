@@ -22,7 +22,9 @@ export function readDetectInputs(env = process.env) {
 
 /**
  * Detects the stack, writes every job output, writes <reports-dir>/sonar-stack.json
- * and appends a step summary. Throws only when the report file cannot be written.
+ * and appends a step summary. Never throws: like the rest of sonar-action, this
+ * is best-effort, so a failure writing the report file is reported as a warning
+ * annotation instead and every output is still written.
  * @param {{ env?: NodeJS.ProcessEnv, log?: (line: string) => void }} options
  * @returns {{ result: import('./stack.js').StackResult, file: string }}
  */
@@ -38,9 +40,13 @@ export function runDetect({ env = process.env, log = console.log } = {}) {
     setOutput('node-version', result.nodeVersion, env, log);
     setOutput('kind', result.kind, env, log);
 
-    mkdirSync(inputs.reportsDir, { recursive: true });
     const file = path.join(inputs.reportsDir, 'sonar-stack.json');
-    writeFileSync(file, `${JSON.stringify(buildStackReport(result), null, 2)}\n`);
+    try {
+        mkdirSync(inputs.reportsDir, { recursive: true });
+        writeFileSync(file, `${JSON.stringify(buildStackReport(result), null, 2)}\n`);
+    } catch (error) {
+        annotate('warning', `sonar-action detect: could not write ${file}: ${error instanceof Error ? error.message : String(error)}`, log);
+    }
 
     writeSummary(detectSummary(result), env, log);
 
