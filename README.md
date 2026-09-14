@@ -68,9 +68,9 @@ Ready-made workflows: [`templates/minimal.yml`](templates/minimal.yml) adds only
 | `cpd.xml`, `pmd-cpd.xml` | `pmd-cpd` | cpd |
 | `knip.json` | `knip-json` | knip |
 | `about.json`, `artisan-about.json` | `artisan-about` | artisan |
-| `sonar-metrics.json` | `sonar-metrics` | sonar |
 | `sbom.cdx.json`, `*.cdx.json` | `cyclonedx-json` | syft |
 | `sonar-stack.json` | `sonar-stack` | sonar (written by the `detect` action) |
+| `sonar-metrics.json` | `sonar-metrics` | sonar |
 
 The test runner is `pest` when `composer.json` requires `pestphp/pest`, otherwise `phpunit` for PHP projects, `vitest` or `jest` for Node projects. Unknown files are listed in the step summary and ignored. A sidecar `<report>.exit` file containing an integer records the tool's exit code (`vendor/bin/phpstan analyse --error-format=json > reports/phpstan.json; echo $? > reports/phpstan.json.exit`).
 
