@@ -93,6 +93,7 @@ test('maps every alternate filename in the RULES table to its format', () => {
         'pmd-cpd.xml': '<pmd-cpd/>',
         'cobertura.xml': '<coverage line-rate="1"/>',
         'inventory.cdx.json': '{}',
+        'vitest-lcov.info': 'TN:',
     });
 
     const expected = {
@@ -105,6 +106,7 @@ test('maps every alternate filename in the RULES table to its format', () => {
         'pmd-cpd.xml': ['pmd-cpd', 'cpd'],
         'cobertura.xml': ['cobertura', 'pest'],
         'inventory.cdx.json': ['cyclonedx-json', 'syft'],
+        'vitest-lcov.info': ['lcov', 'vitest'],
     };
 
     assert.equal(reports.length, Object.keys(expected).length);
@@ -149,6 +151,15 @@ test('a <tool>-junit.xml report is attributed to that tool, junit.xml to the wor
     assert.equal(byReport(reports, 'junit.xml').name, 'pest');
     assert.equal(byReport(reports, 'vitest-junit.xml').name, 'vitest');
     assert.equal(byReport(reports, 'clover.xml').name, 'pest');
+});
+
+test('a <tool>-lcov.info report is attributed to that tool, lcov.info to the workspace test tool', () => {
+    const { reports } = detect({ 'lcov.info': 'TN:', 'jest-lcov.info': 'TN:', 'foo.lcov': 'TN:' }, 'pest');
+
+    assert.equal(byReport(reports, 'lcov.info').name, 'pest');
+    assert.equal(byReport(reports, 'jest-lcov.info').name, 'jest');
+    assert.equal(byReport(reports, 'foo.lcov').name, 'pest');
+    assert.ok(reports.every((r) => r.format === 'lcov'));
 });
 
 test('ignores directories, hidden files and an empty or missing directory', () => {
