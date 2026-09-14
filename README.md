@@ -19,8 +19,6 @@ The action does **not** run any tools. Your jobs run PHPStan, Pest, Pint and fri
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with: { pattern: reports-*, path: reports, merge-multiple: true }
       - uses: ux-nl/sonar-action@90202b9a87508102da761e726f057558695451c0 # v1.0.0
-        with:
-          sonar-url: ${{ vars.SONAR_URL }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with: { name: sonar-reports, path: reports/ }
@@ -34,7 +32,7 @@ Ready-made workflows: [`templates/minimal.yml`](templates/minimal.yml) adds only
 
 | Input | Default | Description |
 |---|---|---|
-| `sonar-url` | required | Base URL of the Sonar instance; also the OIDC audience. Empty (unset variable) makes the action skip with a warning. |
+| `sonar-url` | `https://sonar.ux.nl` | Base URL of the Sonar instance; also the OIDC audience. Set it only when you run your own instance. |
 | `reports-dir` | `reports` | Directory holding the report files, relative to the workspace. |
 | `workspace` | `${{ github.workspace }}` | Path prefix recorded in the manifest so Sonar can make report paths repository-relative. |
 | `fail-on-error` | `false` | When `true`, a failed upload or internal error fails the step. |

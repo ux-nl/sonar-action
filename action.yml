@@ -7,8 +7,9 @@ branding:
 
 inputs:
   sonar-url:
-    description: Base URL of the Sonar instance, also used as the OIDC audience. An empty value makes the action skip with a warning.
-    required: true
+    description: Base URL of the Sonar instance, also used as the OIDC audience.
+    required: false
+    default: https://sonar.ux.nl
   reports-dir:
     description: Directory (relative to the workspace) that holds the report files.
     required: false

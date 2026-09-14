@@ -31,10 +31,6 @@ export async function run({ env = process.env, fetchImpl = fetch, log = console.
     let extras = {};
 
     try {
-        if (inputs.sonarUrl === '') {
-            return skip(result, 'sonar-url is empty (is the SONAR_URL repository variable set?)', inputs, env, log);
-        }
-
         if (!existsSync(inputs.reportsDir)) {
             return skip(result, `reports directory ${inputs.reportsDir} does not exist`, inputs, env, log);
         }

@@ -1,5 +1,5 @@
 # Sonar golden workflow for a Laravel repository. Copy to .github/workflows/quality.yml.
-# Set the SONAR_URL repository (or organization) variable to your Sonar instance.
+# The action sends to https://sonar.ux.nl; pass `sonar-url` under `with:` to use another instance.
 # Change runs-on: self-hosted to ubuntu-latest if you do not use self-hosted runners.
 name: Quality
 
@@ -169,8 +169,6 @@ jobs:
           path: reports
           merge-multiple: true
       - uses: ux-nl/sonar-action@90202b9a87508102da761e726f057558695451c0 # v1.0.0
-        with:
-          sonar-url: ${{ vars.SONAR_URL }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

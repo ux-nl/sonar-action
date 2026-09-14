@@ -74,17 +74,14 @@ test('happy path: writes health.json with extras, uploads, sets outputs and a su
     assert.ok(logs.every((l) => !l.startsWith('::error::')));
 });
 
-test('an empty sonar-url skips with a warning and never touches the network', async () => {
+test('an empty sonar-url uploads to the default instance', async () => {
     const dir = workspaceWithFixtures();
     const { fetchImpl, calls } = fakeFetch();
-    const logs = [];
 
-    const result = await run({ env: envFor(dir, { 'INPUT_SONAR-URL': '' }), fetchImpl, log: (l) => logs.push(l) });
+    const result = await run({ env: envFor(dir, { 'INPUT_SONAR-URL': '' }), fetchImpl, log: () => {} });
 
-    assert.equal(result.status, 'skipped');
-    assert.equal(calls.length, 0);
-    assert.ok(logs.some((l) => l.startsWith('::warning::') && l.includes('sonar-url')));
-    assert.match(readFileSync(path.join(dir, 'GITHUB_OUTPUT'), 'utf8'), /^status=skipped$/m);
+    assert.equal(result.status, 'uploaded');
+    assert.equal(calls.at(-1).url, 'https://sonar.ux.nl/api/ingest');
 });
 
 test('a missing reports directory or no recognised reports skips', async () => {

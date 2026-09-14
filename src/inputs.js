@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { readJson } from './fs-utils.js';
 
+export const DEFAULT_SONAR_URL = 'https://sonar.ux.nl';
+
 /**
  * Reads the action inputs GitHub exposes as INPUT_* environment variables.
  * @param {NodeJS.ProcessEnv} env
@@ -11,7 +13,7 @@ export function readInputs(env = process.env) {
     const workspace = input('workspace') || env.GITHUB_WORKSPACE || process.cwd();
 
     return {
-        sonarUrl: input('sonar-url').replace(/\/+$/, ''),
+        sonarUrl: (input('sonar-url') || DEFAULT_SONAR_URL).replace(/\/+$/, ''),
         reportsDir: path.resolve(workspace, input('reports-dir') || 'reports'),
         workspace,
         failOnError: /^(true|1|yes)$/i.test(input('fail-on-error')),

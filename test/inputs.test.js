@@ -30,8 +30,9 @@ test('readInputs falls back to GITHUB_WORKSPACE, reports/ and fail-on-error fals
     assert.equal(inputs.failOnError, false);
 });
 
-test('readInputs treats an unset sonar-url as empty', () => {
-    assert.equal(readInputs({ GITHUB_WORKSPACE: '/gh/ws' }).sonarUrl, '');
+test('readInputs defaults sonar-url to https://sonar.ux.nl when unset or empty', () => {
+    assert.equal(readInputs({ GITHUB_WORKSPACE: '/gh/ws' }).sonarUrl, 'https://sonar.ux.nl');
+    assert.equal(readInputs({ 'INPUT_SONAR-URL': '  ', GITHUB_WORKSPACE: '/gh/ws' }).sonarUrl, 'https://sonar.ux.nl');
 });
 
 test('readContext uses the head ref on pull requests and the ref name otherwise', () => {
