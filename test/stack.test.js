@@ -228,6 +228,19 @@ test('composer.lock platform override wins for the install version, not the decl
     assert.equal(result.runtimes.php, '8.2');
 });
 
+test('composer.lock "platform" mirroring require.php (not an override) is ignored', () => {
+    // Every composer.lock carries a "platform" object that mirrors require.php's
+    // constraint verbatim, whether or not anyone actually overrode anything; only
+    // an exact version there (or under "platform-overrides") counts as an override.
+    const result = detectStack(tmpWorkspace({
+        'composer.json': JSON.stringify({ require: { php: '^8.3' } }),
+        'composer.lock': JSON.stringify({ packages: [], 'packages-dev': [], platform: { php: '^8.3' } }),
+    }));
+
+    assert.equal(result.phpVersion, '8.4');
+    assert.equal(result.runtimes.php, '8.3');
+});
+
 test('buildStackReport produces the schema 1 document', () => {
     const report = buildStackReport(detectStack(tmpWorkspace(LARAVEL)));
 

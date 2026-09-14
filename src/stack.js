@@ -67,7 +67,11 @@ export function detectStack(workspace) {
         wordpress: wordpressCore ? phpPackages.get(wordpressCore) : null,
     };
 
-    const lockPhpPlatform = composerLock?.['platform-overrides']?.php ?? composerLock?.platform?.php ?? null;
+    // composer.lock always mirrors require.php's constraint verbatim under "platform"
+    // (e.g. "^8.3"), whether or not anyone overrode anything; only trust it (or the
+    // genuine "platform-overrides") when it is an exact version, not a range.
+    const rawLockPlatform = composerLock?.['platform-overrides']?.php ?? composerLock?.platform?.php ?? null;
+    const lockPhpPlatform = rawLockPlatform && isExactVersion(rawLockPlatform) ? rawLockPlatform : null;
     const installPhp = php ? (lockPhpPlatform ? majorMinorOf(lockPhpPlatform) : highestPhpMinor(phpConstraint)) : null;
     const installNode = node ? installNodeVersion(workspace, pkg) : null;
 
@@ -290,6 +294,16 @@ function highestSatisfying(constraint, cap) {
 function majorMinorOf(version) {
     const match = String(version).match(/^(\d+)\.(\d+)/);
     return match ? `${match[1]}.${match[2]}` : String(version);
+}
+
+/**
+ * True for a plain `major`, `major.minor` or `major.minor.patch` version
+ * (e.g. `8.3.12`); false for a range/constraint (`^8.3`, `>=8.1`, `8.3.*`, …).
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isExactVersion(value) {
+    return /^\d+(\.\d+){0,2}$/.test(String(value).trim());
 }
 
 /**
