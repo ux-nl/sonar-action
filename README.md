@@ -52,7 +52,7 @@ Ready-made workflows: [`templates/minimal.yml`](templates/minimal.yml) adds only
 | `clover.xml`, `coverage.xml` (Clover) | `clover` | test runner |
 | `cobertura.xml`, `coverage.xml` (Cobertura) | `cobertura` | test runner |
 | `lcov.info`, `*.lcov` | `lcov` | test runner |
-| `junit.xml`, `*-junit.xml` | `junit` | test runner |
+| `junit.xml`, `*-junit.xml` | `junit` | test runner; `<tool>-junit.xml` names the tool |
 | `*.sarif`, `*.sarif.json` | `sarif` | driver name from the file |
 | `phpstan.json` | `phpstan-json` | phpstan |
 | `type-coverage.json`, `pest-type-coverage.json` | `pest-type-coverage` | pest |
@@ -69,6 +69,8 @@ Ready-made workflows: [`templates/minimal.yml`](templates/minimal.yml) adds only
 | `knip.json` | `knip-json` | knip |
 | `about.json`, `artisan-about.json` | `artisan-about` | artisan |
 | `sonar-metrics.json` | `sonar-metrics` | sonar |
+| `sbom.cdx.json`, `*.cdx.json` | `cyclonedx-json` | syft |
+| `sonar-stack.json` | `sonar-stack` | sonar (written by the `detect` action) |
 
 The test runner is `pest` when `composer.json` requires `pestphp/pest`, otherwise `phpunit` for PHP projects, `vitest` or `jest` for Node projects. Unknown files are listed in the step summary and ignored. A sidecar `<report>.exit` file containing an integer records the tool's exit code (`vendor/bin/phpstan analyse --error-format=json > reports/phpstan.json; echo $? > reports/phpstan.json.exit`).
 
