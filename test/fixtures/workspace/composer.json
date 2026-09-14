@@ -1,1 +1,1 @@
-{"require-dev":{"pestphp/pest":"^4.0"}}
+{"require-dev":{"pestphp/pest":"^4.0","phpstan/phpstan":"^2.0"}}

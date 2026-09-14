@@ -19,6 +19,26 @@ jobs:
           node-version: '24'
       - run: npm test
 
+  detect-self-test:
+    name: Run the detect action against the fixture workspace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - id: detect
+        uses: ./detect
+        with:
+          workspace: ${{ github.workspace }}/test/fixtures/workspace
+          reports-dir: out
+      - name: Assert outputs
+        run: |
+          test "${{ steps.detect.outputs.php }}" = "true"
+          test "${{ steps.detect.outputs.phpstan }}" = "true"
+          test "${{ steps.detect.outputs.pest }}" = "true"
+          test "${{ steps.detect.outputs.node }}" = "false"
+          test "${{ steps.detect.outputs.kind }}" = "other"
+          test -f test/fixtures/workspace/out/sonar-stack.json
+          grep -q '"schema": 1' test/fixtures/workspace/out/sonar-stack.json
+
   self-test:
     name: Run the action against a fake Sonar
     runs-on: ubuntu-latest
@@ -49,3 +69,6 @@ jobs:
           test "${{ steps.sonar.outputs.run-id }}" = "1"
           test -f test/fixtures/reports/health.json
           grep -q '"phpstan.level": 8' test/fixtures/reports/sonar-metrics.json
+          grep -q '"name": "syft"' test/fixtures/reports/health.json
+          grep -q '"format": "cyclonedx-json"' test/fixtures/reports/health.json
+          grep -q '"format": "sonar-stack"' test/fixtures/reports/health.json
