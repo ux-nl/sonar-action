@@ -83,7 +83,8 @@ jobs:
     name: Inventory (syft)
     needs: detect
     runs-on: ubuntu-latest
-    if: ${{ !contains(needs.detect.outputs.skip, ',inventory,') }}
+    # !cancelled() suppresses implicit success() so this runs even if detect failed
+    if: ${{ !cancelled() && !contains(needs.detect.outputs.skip, ',inventory,') }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - run: mkdir -p reports
@@ -105,7 +106,8 @@ jobs:
     name: Secrets (gitleaks)
     needs: detect
     runs-on: ubuntu-latest
-    if: ${{ !contains(needs.detect.outputs.skip, ',secrets,') }}
+    # !cancelled() suppresses implicit success() so this runs even if detect failed
+    if: ${{ !cancelled() && !contains(needs.detect.outputs.skip, ',secrets,') }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - run: mkdir -p reports
