@@ -45,7 +45,7 @@ test('runDetect writes every output, the stack report and a summary', () => {
     assert.equal(out.phpunit, 'false');
     assert.equal(out.phpstan, 'false');
     assert.equal(out['package-manager'], '');
-    assert.equal(out['php-version'], '8.3');
+    assert.equal(out['php-version'], '8.4');
     assert.equal(out['node-version'], '22');
     assert.equal(out.kind, 'app');
     assert.equal(Object.keys(out).length, 18);

@@ -67,11 +67,15 @@ export function detectStack(workspace) {
         wordpress: wordpressCore ? phpPackages.get(wordpressCore) : null,
     };
 
+    const lockPhpPlatform = composerLock?.['platform-overrides']?.php ?? composerLock?.platform?.php ?? null;
+    const installPhp = php ? (lockPhpPlatform ? majorMinorOf(lockPhpPlatform) : highestPhpMinor(phpConstraint)) : null;
+    const installNode = node ? installNodeVersion(workspace, pkg) : null;
+
     return {
         flags,
         packageManagers: { php: php ? 'composer' : null, node: nodePackages.manager },
-        phpVersion: declaredPhp ?? DEFAULT_PHP_VERSION,
-        nodeVersion: declaredNode ?? DEFAULT_NODE_VERSION,
+        phpVersion: installPhp ?? DEFAULT_PHP_VERSION,
+        nodeVersion: installNode ?? DEFAULT_NODE_VERSION,
         kind: resolveKind(composer, pkg, flags),
         runtimes,
         stack: STACK_ORDER.filter((name) => flags[name]),
@@ -121,6 +125,190 @@ export function lowestNodeMajor(constraint) {
     }
     bounds.sort((a, b) => a.major - b.major);
     return String(bounds[0].major);
+}
+
+/**
+ * Highest `major.minor` that satisfies a composer PHP constraint, capped at
+ * {@link DEFAULT_PHP_VERSION}. Unlike {@link lowestPhpMinor}, upper bounds
+ * (`<`, `<=`) are honoured and alternatives (`||`) are evaluated independently.
+ * Falls back to the cap when the constraint has no upper bound, is empty, or
+ * is `*`; never returns lower than the constraint's own lower bound, even
+ * when that lower bound is itself past the cap.
+ * @param {string} constraint
+ * @returns {string}
+ */
+export function highestPhpMinor(constraint) {
+    const version = highestSatisfying(constraint, versionOf(DEFAULT_PHP_VERSION));
+    return `${version.major}.${version.minor}`;
+}
+
+/**
+ * Highest major that satisfies a node engines constraint, capped at
+ * {@link DEFAULT_NODE_VERSION}. See {@link highestPhpMinor} for the semantics.
+ * @param {string} constraint
+ * @returns {string}
+ */
+export function highestNodeMajor(constraint) {
+    const version = highestSatisfying(constraint, versionOf(DEFAULT_NODE_VERSION));
+    return String(version.major);
+}
+
+/**
+ * @param {string} version e.g. '8.4' or '22'
+ * @returns {{ major: number, minor: number }}
+ */
+function versionOf(version) {
+    const [major, minor] = String(version).split('.');
+    return { major: Number(major), minor: minor === undefined ? 0 : Number(minor) };
+}
+
+/** Sentinels for an open lower/upper bound; compared by reference. */
+const NEG_INF = { major: -Infinity, minor: -Infinity };
+const POS_INF = { major: Infinity, minor: Infinity };
+
+/**
+ * @param {{ major: number, minor: number }} a
+ * @param {{ major: number, minor: number }} b
+ * @returns {number} negative when a < b, positive when a > b
+ */
+function compareVer(a, b) {
+    return a.major !== b.major ? a.major - b.major : a.minor - b.minor;
+}
+
+function maxVer(a, b) {
+    return compareVer(a, b) >= 0 ? a : b;
+}
+
+function minVer(a, b) {
+    return compareVer(a, b) <= 0 ? a : b;
+}
+
+/**
+ * The major.minor immediately below `version`, borrowing from major when
+ * minor is 0. `Infinity` minor stays `Infinity` (an unbounded major).
+ * @param {{ major: number, minor: number }} version
+ * @returns {{ major: number, minor: number }}
+ */
+function prevMinor({ major, minor }) {
+    if (minor === Infinity) {
+        return { major, minor: Infinity };
+    }
+    return minor > 0 ? { major, minor: minor - 1 } : { major: major - 1, minor: Infinity };
+}
+
+/**
+ * Parses one bare version token (no `||`, at most one operator) into an
+ * inclusive lower bound and an exclusive upper bound at major.minor
+ * granularity. Returns null for tokens that cannot be parsed (e.g. `!=1.0`).
+ * @param {string} token
+ * @returns {{ lower: { major: number, minor: number }, upperExclusive: { major: number, minor: number } } | null}
+ */
+function parseToken(token) {
+    const match = token.match(/^(<=|>=|<|>|\^|~|=)?v?(\d+)(?:\.(\d+))?(?:\.(\d+|\*|x))?$/i);
+    if (!match) {
+        return null;
+    }
+    const [, op, majorStr, minorStr, patchStr] = match;
+    const major = Number(majorStr);
+    const minor = minorStr === undefined ? 0 : Number(minorStr);
+    const patchGiven = patchStr !== undefined && !/^[*x]$/i.test(patchStr);
+
+    switch (op) {
+        case '>=':
+            return { lower: { major, minor }, upperExclusive: POS_INF };
+        case '>':
+            return { lower: { major, minor: minor + 1 }, upperExclusive: POS_INF };
+        case '<=':
+            return { lower: NEG_INF, upperExclusive: { major, minor: minor + 1 } };
+        case '<':
+            return { lower: NEG_INF, upperExclusive: { major, minor } };
+        case '^':
+            return { lower: { major, minor }, upperExclusive: { major: major + 1, minor: 0 } };
+        case '~':
+            // ~X.Y.Z restricts to the same minor; ~X or ~X.Y behaves like ^X.
+            return minorStr !== undefined && patchGiven
+                ? { lower: { major, minor }, upperExclusive: { major, minor: minor + 1 } }
+                : { lower: { major, minor }, upperExclusive: { major: major + 1, minor: 0 } };
+        default:
+            // exact pin, with or without a wildcard patch: a single minor
+            return { lower: { major, minor }, upperExclusive: { major, minor: minor + 1 } };
+    }
+}
+
+/**
+ * Highest major.minor satisfying a composer/npm-style constraint, capped at
+ * `cap`. Alternatives (`||`) are evaluated independently and the best one
+ * wins; space/comma-separated tokens within one alternative are intersected
+ * (composer's AND). Constraints with no parseable token (`*`, empty) resolve
+ * to `cap`.
+ * @param {string} constraint
+ * @param {{ major: number, minor: number }} cap
+ * @returns {{ major: number, minor: number }}
+ */
+function highestSatisfying(constraint, cap) {
+    const alternatives = String(constraint).split(/\s*\|\|\s*/).map((alt) => alt.trim()).filter(Boolean);
+
+    let best = null;
+    for (const alt of alternatives) {
+        let lower = NEG_INF;
+        let upperExclusive = POS_INF;
+        let any = false;
+
+        for (const token of alt.split(/\s*,\s*|\s+/).filter(Boolean)) {
+            const range = parseToken(token);
+            if (!range) {
+                continue;
+            }
+            any = true;
+            lower = maxVer(lower, range.lower);
+            upperExclusive = minVer(upperExclusive, range.upperExclusive);
+        }
+        if (!any) {
+            continue;
+        }
+
+        const upperInclusive = upperExclusive === POS_INF ? POS_INF : prevMinor(upperExclusive);
+        let candidate = minVer(upperInclusive, cap);
+        if (compareVer(lower, candidate) > 0) {
+            candidate = lower;
+        }
+        best = best === null ? candidate : maxVer(best, candidate);
+    }
+
+    if (best === null) {
+        return cap;
+    }
+    // An unbounded minor within a major (e.g. a lone `^7.4` below the cap's
+    // major) has no real highest minor to report; fall back to `.0`.
+    return { major: best.major, minor: best.minor === Infinity ? 0 : best.minor };
+}
+
+/**
+ * @param {string} version e.g. '8.3.12'
+ * @returns {string} 'major.minor', e.g. '8.3'
+ */
+function majorMinorOf(version) {
+    const match = String(version).match(/^(\d+)\.(\d+)/);
+    return match ? `${match[1]}.${match[2]}` : String(version);
+}
+
+/**
+ * Node version to install: `.nvmrc` major when present, else the highest
+ * major satisfying `engines.node` capped at {@link DEFAULT_NODE_VERSION},
+ * else {@link DEFAULT_NODE_VERSION}.
+ * @param {string} workspace
+ * @param {any} pkg
+ * @returns {string}
+ */
+function installNodeVersion(workspace, pkg) {
+    const nvmrc = path.join(workspace, '.nvmrc');
+    if (existsSync(nvmrc)) {
+        const match = readFileSync(nvmrc, 'utf8').trim().match(/^v?(\d+)/);
+        if (match) {
+            return match[1];
+        }
+    }
+    return typeof pkg?.engines?.node === 'string' ? highestNodeMajor(pkg.engines.node) : DEFAULT_NODE_VERSION;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStackReport, detectStack, lowestNodeMajor, lowestPhpMinor } from '../src/stack.js';
+import { buildStackReport, detectStack, highestNodeMajor, highestPhpMinor, lowestNodeMajor, lowestPhpMinor } from '../src/stack.js';
 import { cleanupWorkspaces, tmpWorkspace } from './helpers.js';
 
 after(cleanupWorkspaces);
@@ -29,7 +29,7 @@ test('laravel app: php, laravel and node with every php tool', () => {
         eslint: false, vitest: false, jest: false, knip: false,
     });
     assert.deepEqual(result.packageManagers, { php: 'composer', node: 'npm' });
-    assert.equal(result.phpVersion, '8.2');
+    assert.equal(result.phpVersion, '8.4');
     assert.equal(result.nodeVersion, '22');
     assert.equal(result.kind, 'app');
     assert.deepEqual(result.runtimes, { php: '8.2', laravel: '12.10.0', node: '22', wordpress: null });
@@ -54,7 +54,7 @@ test('php library without a lock file: flags from composer.json, kind package, p
     assert.equal(result.flags.pest, false);
     assert.equal(result.flags.pint, true);
     assert.equal(result.flags.laravel, false);
-    assert.equal(result.phpVersion, '8.1');
+    assert.equal(result.phpVersion, '8.3');
     assert.equal(result.kind, 'package');
     assert.deepEqual(result.runtimes, { php: '8.1', laravel: null, node: null, wordpress: null });
     assert.deepEqual(result.stack, ['php']);
@@ -118,7 +118,7 @@ test('vue app with pnpm: node flags from pnpm-lock.yaml, kind app', () => {
     assert.equal(result.flags.knip, true);
     assert.equal(result.flags.jest, false);
     assert.deepEqual(result.packageManagers, { php: null, node: 'pnpm' });
-    assert.equal(result.nodeVersion, '20');
+    assert.equal(result.nodeVersion, '22');
     assert.equal(result.kind, 'app');
     assert.deepEqual(result.runtimes, { php: null, laravel: null, node: '20', wordpress: null });
     assert.deepEqual(result.stack, ['node']);
@@ -190,6 +190,42 @@ test('lowestNodeMajor picks the lowest lower bound major', () => {
     assert.equal(lowestNodeMajor('18 || 20'), '18');
     assert.equal(lowestNodeMajor('>=18 <23'), '18');
     assert.equal(lowestNodeMajor('*'), null);
+});
+
+test('highestPhpMinor picks the highest satisfying minor, capped at the default', () => {
+    assert.equal(highestPhpMinor('^8.2'), '8.4');
+    assert.equal(highestPhpMinor('>=8.1 <8.4'), '8.3');
+    assert.equal(highestPhpMinor('8.3.*'), '8.3');
+    assert.equal(highestPhpMinor('~8.2.0'), '8.2');
+    assert.equal(highestPhpMinor('*'), '8.4');
+    assert.equal(highestPhpMinor(''), '8.4');
+});
+
+test('highestNodeMajor picks the highest satisfying major, capped at the default', () => {
+    assert.equal(highestNodeMajor('>=18'), '22');
+    assert.equal(highestNodeMajor('^20.10.0'), '20');
+    assert.equal(highestNodeMajor('18 || 20'), '20');
+    assert.equal(highestNodeMajor('>=18 <23'), '22');
+    assert.equal(highestNodeMajor('*'), '22');
+});
+
+test('php-version output is the highest allowed minor; the declared runtime keeps the floor', () => {
+    const result = detectStack(tmpWorkspace({
+        'composer.json': JSON.stringify({ require: { php: '^8.2' } }),
+    }));
+
+    assert.equal(result.phpVersion, '8.4');
+    assert.equal(result.runtimes.php, '8.2');
+});
+
+test('composer.lock platform override wins for the install version, not the declared runtime', () => {
+    const result = detectStack(tmpWorkspace({
+        'composer.json': JSON.stringify({ require: { php: '^8.2' } }),
+        'composer.lock': JSON.stringify({ packages: [], 'packages-dev': [], platform: { php: '8.3.12' } }),
+    }));
+
+    assert.equal(result.phpVersion, '8.3');
+    assert.equal(result.runtimes.php, '8.2');
 });
 
 test('buildStackReport produces the schema 1 document', () => {

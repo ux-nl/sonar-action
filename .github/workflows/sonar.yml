@@ -7,12 +7,12 @@ on:
   workflow_call:
     inputs:
       php-version:
-        description: PHP version for setup-php. Default is detected from composer.json (lowest minor of require.php), else 8.4.
+        description: PHP version for setup-php. Default is detected from composer.lock's platform override, else the highest minor satisfying composer.json's require.php (capped at 8.4), else 8.4.
         type: string
         required: false
         default: ''
       node-version:
-        description: Node version for setup-node. Default is detected from .nvmrc or engines.node, else 22.
+        description: Node version for setup-node. Default is detected from .nvmrc, else the highest major satisfying engines.node (capped at 22), else 22.
         type: string
         required: false
         default: ''

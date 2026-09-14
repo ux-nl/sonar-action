@@ -47,9 +47,9 @@ outputs:
   package-manager:
     description: npm, pnpm or yarn from the lockfile present; empty without package.json.
   php-version:
-    description: Lowest PHP minor satisfying composer.json require.php, else 8.4.
+    description: PHP version to install. composer.lock's platform override, else the highest PHP minor satisfying composer.json require.php capped at 8.4, else 8.4.
   node-version:
-    description: Node major from .nvmrc, then engines.node, else 22.
+    description: Node version to install. .nvmrc major, else the highest major satisfying engines.node capped at 22, else 22.
   kind:
     description: app, package, site or other.
 
