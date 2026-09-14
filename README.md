@@ -51,8 +51,8 @@ The final `sonar` job always runs (`if: always()`). Like the action itself, it n
 
 | Input | Default | Description |
 |---|---|---|
-| `php-version` | detected (highest minor satisfying `require.php`, capped at 8.4), else `8.4` | Version for setup-php. |
-| `node-version` | `.nvmrc`, then highest major satisfying `engines.node` (capped at 22), else `22` | Version for setup-node. |
+| `php-version` | detected (`composer.lock`'s exact platform override when present, else highest minor satisfying `require.php`, capped at 8.4), else `8.4` | Version for setup-php. |
+| `node-version` | detected (`.nvmrc` major when pinned, else highest major satisfying `engines.node`, capped at 22), else `22` | Version for setup-node. |
 | `skip` | empty | Comma-separated job names to skip, e.g. `rector,tests`. |
 | `sonar-url` | action default | Only when running your own Sonar instance. |
 
@@ -87,7 +87,7 @@ The trailing `upload-artifact` step is Sonar's fallback: if the upload to Sonar 
 The `php-version`/`node-version` outputs (also used as the reusable workflow's install versions) and the `runtimes.php`/`runtimes.node` fields written into `sonar-stack.json` answer different questions and can differ:
 
 - **Install version** (`php-version`, `node-version` outputs): the lock's exact platform override when present, else the *highest* minor satisfying `require.php` capped at 8.4 for PHP (8.4 when `require.php` is undeclared), and the `.nvmrc` major, else the *highest* major satisfying `engines.node` capped at 22 for Node. CI runs on the newest version the project's constraints allow.
-- **Declared runtime** (`sonar-stack.json`'s `runtimes.php`/`runtimes.node`): the *lowest* version satisfying the same `require.php`/`engines.node` constraints — the floor the project claims to still support. Sonar uses this for EOL checks, since a repository is only as safe as the oldest runtime it still allows.
+- **Declared runtime** (`sonar-stack.json`'s `runtimes.php`/`runtimes.node`): for PHP, the *lowest* minor satisfying `require.php` — the floor the project claims to still support. For Node, the `.nvmrc` major when the file is pinned (same value as the install version), else the *lowest* major satisfying `engines.node`. Sonar uses this for EOL checks, since a repository is only as safe as the oldest runtime it still allows (or, when `.nvmrc` pins an exact version, exactly as safe as that version).
 
 ## Inputs
 
