@@ -71,7 +71,7 @@ jobs:
         run: printf 'list=,%s,\n' "$(printf '%s' "$SKIP" | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - id: detect
-        uses: ux-nl/sonar-action/detect@v1.1-reusable-workflow # SONAR_ACTION_REF
+        uses: ux-nl/sonar-action/detect@7e1cc8ea1d0428675686f4887666e9a20ac81766 # v1.1.0 SONAR_ACTION_REF
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -422,7 +422,7 @@ jobs:
           pattern: reports-*
           path: reports
           merge-multiple: true
-      - uses: ux-nl/sonar-action@v1.1-reusable-workflow # SONAR_ACTION_REF
+      - uses: ux-nl/sonar-action@7e1cc8ea1d0428675686f4887666e9a20ac81766 # v1.1.0 SONAR_ACTION_REF
         with:
           sonar-url: ${{ inputs.sonar-url }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
