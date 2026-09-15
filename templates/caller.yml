@@ -15,4 +15,4 @@ permissions:
 
 jobs:
   sonar:
-    uses: ux-nl/sonar-action/.github/workflows/sonar.yml@<sha> # v1.1.0
+    uses: ux-nl/sonar-action/.github/workflows/sonar.yml@f5772d53ad07d6b14e3a18eae74675c47e771b29 # v1.1.0

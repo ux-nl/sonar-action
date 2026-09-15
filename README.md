@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   sonar:
-    uses: ux-nl/sonar-action/.github/workflows/sonar.yml@<sha> # v1.1.0
+    uses: ux-nl/sonar-action/.github/workflows/sonar.yml@f5772d53ad07d6b14e3a18eae74675c47e771b29 # v1.1.0
 ```
 
 The reusable workflow declares no secrets, so the caller passes none: it authenticates to Sonar with the run's OIDC token, which is why the caller needs `id-token: write`. Optional `secrets:` will be declared explicitly if a private package registry ever needs credentials.
@@ -74,7 +74,7 @@ The final `sonar` job runs unless the whole workflow was cancelled (`if: !cancel
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with: { pattern: reports-*, path: reports, merge-multiple: true }
-      - uses: ux-nl/sonar-action@<sha> # v1.1.0
+      - uses: ux-nl/sonar-action@f5772d53ad07d6b14e3a18eae74675c47e771b29 # v1.1.0
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with: { name: sonar-reports, path: reports/ }
