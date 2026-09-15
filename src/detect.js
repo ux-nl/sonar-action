@@ -7,13 +7,14 @@ export const TEST_TOOL = Symbol('test-tool');
 
 /**
  * Ordered detection rules: the first matching rule wins.
- * `tool` is a string, TEST_TOOL, or a function (fileName, filePath) => string.
+ * `tool` is a string, TEST_TOOL (resolved to the workspace test runner, or to the stem of a
+ * `<tool>-junit.xml` / `<tool>-lcov.info` file name), or a function (fileName, filePath) => string.
  * @type {Array<{ match: (name: string, head: string) => boolean, format: string, tool: string|symbol|((name: string, file: string) => string), example: string }>}
  */
 export const RULES = [
     { match: (n, head) => n === 'clover.xml' || (n === 'coverage.xml' && head.includes('<project')), format: 'clover', tool: TEST_TOOL, example: 'clover.xml' },
     { match: (n, head) => n === 'cobertura.xml' || (n === 'coverage.xml' && head.includes('line-rate')), format: 'cobertura', tool: TEST_TOOL, example: 'cobertura.xml' },
-    { match: (n) => n === 'lcov.info' || n.endsWith('.lcov'), format: 'lcov', tool: TEST_TOOL, example: 'lcov.info' },
+    { match: (n) => n === 'lcov.info' || n.endsWith('-lcov.info') || n.endsWith('.lcov'), format: 'lcov', tool: TEST_TOOL, example: 'lcov.info' },
     { match: (n) => n === 'junit.xml' || n.endsWith('-junit.xml'), format: 'junit', tool: TEST_TOOL, example: 'junit.xml' },
     { match: (n) => n.endsWith('.sarif') || n.endsWith('.sarif.json'), format: 'sarif', tool: sarifTool, example: 'semgrep.sarif' },
     { match: (n) => n === 'phpstan.json', format: 'phpstan-json', tool: 'phpstan', example: 'phpstan.json' },
@@ -33,6 +34,8 @@ export const RULES = [
     { match: (n) => n === 'knip.json', format: 'knip-json', tool: 'knip', example: 'knip.json' },
     { match: (n) => n === 'about.json' || n === 'artisan-about.json', format: 'artisan-about', tool: 'artisan', example: 'about.json' },
     { match: (n) => n === 'sonar-metrics.json', format: 'sonar-metrics', tool: 'sonar', example: 'sonar-metrics.json' },
+    { match: (n) => n === 'sbom.cdx.json' || n.endsWith('.cdx.json'), format: 'cyclonedx-json', tool: 'syft', example: 'sbom.cdx.json' },
+    { match: (n) => n === 'sonar-stack.json', format: 'sonar-stack', tool: 'sonar', example: 'sonar-stack.json' },
 ];
 
 const RESERVED = new Set(['health.json']);
@@ -114,7 +117,8 @@ export function detectTestTool(workspace) {
 
 function resolveTool(tool, name, file, testTool) {
     if (tool === TEST_TOOL) {
-        return testTool;
+        const prefixed = name.match(/^(.+)-(?:junit\.xml|lcov\.info)$/);
+        return prefixed ? prefixed[1] : testTool;
     }
     return typeof tool === 'function' ? tool(name, file) : tool;
 }

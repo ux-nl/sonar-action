@@ -1,0 +1,18 @@
+# Sonar caller workflow. Copy to .github/workflows/sonar.yml.
+# Runs on every push to the default branch and on demand (Actions tab, `gh workflow run sonar.yml`,
+# or the "Run scan" button in Sonar). No schedule: runs cost hosted minutes, so a person decides.
+# Optional inputs (under `with:`): php-version, node-version, skip (comma list of job names), sonar-url.
+name: Sonar
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  sonar:
+    uses: ux-nl/sonar-action/.github/workflows/sonar.yml@<sha> # v1.1.0

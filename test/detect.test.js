@@ -38,6 +38,8 @@ test('maps every known filename to its format and default tool', () => {
         'knip.json': '{}',
         'about.json': '{}',
         'sonar-metrics.json': '{}',
+        'sbom.cdx.json': '{"bomFormat":"CycloneDX"}',
+        'sonar-stack.json': '{"schema":1}',
         'health.json': '{}',
         'phpstan.json.exit': '1',
         'notes.md': 'ignored',
@@ -64,6 +66,8 @@ test('maps every known filename to its format and default tool', () => {
         'knip.json': ['knip-json', 'knip'],
         'about.json': ['artisan-about', 'artisan'],
         'sonar-metrics.json': ['sonar-metrics', 'sonar'],
+        'sbom.cdx.json': ['cyclonedx-json', 'syft'],
+        'sonar-stack.json': ['sonar-stack', 'sonar'],
     };
 
     assert.equal(reports.length, Object.keys(expected).length);
@@ -88,17 +92,21 @@ test('maps every alternate filename in the RULES table to its format', () => {
         'artisan-about.json': '{}',
         'pmd-cpd.xml': '<pmd-cpd/>',
         'cobertura.xml': '<coverage line-rate="1"/>',
+        'inventory.cdx.json': '{}',
+        'vitest-lcov.info': 'TN:',
     });
 
     const expected = {
         'foo.lcov': ['lcov', 'pest'],
-        'phpunit-junit.xml': ['junit', 'pest'],
+        'phpunit-junit.xml': ['junit', 'phpunit'],
         'infection-log.json': ['infection-json', 'infection'],
         'pest-type-coverage.json': ['pest-type-coverage', 'pest'],
         'pest-mutation.txt': ['pest-mutation-text', 'pest'],
         'artisan-about.json': ['artisan-about', 'artisan'],
         'pmd-cpd.xml': ['pmd-cpd', 'cpd'],
         'cobertura.xml': ['cobertura', 'pest'],
+        'inventory.cdx.json': ['cyclonedx-json', 'syft'],
+        'vitest-lcov.info': ['lcov', 'vitest'],
     };
 
     assert.equal(reports.length, Object.keys(expected).length);
@@ -135,6 +143,23 @@ test('uses the supplied test tool for coverage and junit files', () => {
     const { reports } = detect({ 'junit.xml': '<testsuites/>', 'cobertura.xml': '<coverage line-rate="1"/>' }, 'vitest');
 
     assert.ok(reports.every((r) => r.name === 'vitest'));
+});
+
+test('a <tool>-junit.xml report is attributed to that tool, junit.xml to the workspace test tool', () => {
+    const { reports } = detect({ 'junit.xml': '<testsuites/>', 'vitest-junit.xml': '<testsuites/>', 'clover.xml': '<coverage><project/></coverage>' }, 'pest');
+
+    assert.equal(byReport(reports, 'junit.xml').name, 'pest');
+    assert.equal(byReport(reports, 'vitest-junit.xml').name, 'vitest');
+    assert.equal(byReport(reports, 'clover.xml').name, 'pest');
+});
+
+test('a <tool>-lcov.info report is attributed to that tool, lcov.info to the workspace test tool', () => {
+    const { reports } = detect({ 'lcov.info': 'TN:', 'jest-lcov.info': 'TN:', 'foo.lcov': 'TN:' }, 'pest');
+
+    assert.equal(byReport(reports, 'lcov.info').name, 'pest');
+    assert.equal(byReport(reports, 'jest-lcov.info').name, 'jest');
+    assert.equal(byReport(reports, 'foo.lcov').name, 'pest');
+    assert.ok(reports.every((r) => r.format === 'lcov'));
 });
 
 test('ignores directories, hidden files and an empty or missing directory', () => {

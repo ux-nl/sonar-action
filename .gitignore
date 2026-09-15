@@ -2,3 +2,4 @@ node_modules/
 .DS_Store
 test/fixtures/reports/health.json
 test/fixtures/reports/sonar-metrics.json
+test/fixtures/workspace/out/

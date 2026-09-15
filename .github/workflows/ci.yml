@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
 
 permissions:
@@ -18,6 +19,46 @@ jobs:
         with:
           node-version: '24'
       - run: npm test
+
+  release-refs-pinned:
+    name: Release refs pinned to a SHA
+    runs-on: ubuntu-latest
+    # While a release branch is open the reusable workflow and the templates may point at it by
+    # name. That branch is deleted after the merge, and every caller in the fleet resolves its
+    # `uses:` at run time, so anything that reaches main or a tag unpinned would send the whole
+    # fleet at a ref that no longer exists. On main and on tags every ref must be a commit SHA.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Every ux-nl/sonar-action ref is a 40-hex commit SHA
+        run: |
+          unpinned=$(grep -nE 'ux-nl/sonar-action(/[a-z-]+)?(/\.github/workflows/sonar\.yml)?@' \
+            .github/workflows/sonar.yml templates/*.yml | grep -vE '@[0-9a-f]{40}( |$|#)' || true)
+          if [ -n "$unpinned" ]; then
+            echo "Unpinned ux-nl/sonar-action refs:"
+            echo "$unpinned"
+            exit 1
+          fi
+
+  detect-self-test:
+    name: Run the detect action against the fixture workspace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - id: detect
+        uses: ./detect
+        with:
+          workspace: ${{ github.workspace }}/test/fixtures/workspace
+          reports-dir: out
+      - name: Assert outputs
+        run: |
+          test "${{ steps.detect.outputs.php }}" = "true"
+          test "${{ steps.detect.outputs.phpstan }}" = "true"
+          test "${{ steps.detect.outputs.pest }}" = "true"
+          test "${{ steps.detect.outputs.node }}" = "false"
+          test "${{ steps.detect.outputs.kind }}" = "other"
+          test -f test/fixtures/workspace/out/sonar-stack.json
+          grep -q '"schema": 1' test/fixtures/workspace/out/sonar-stack.json
 
   self-test:
     name: Run the action against a fake Sonar
@@ -49,3 +90,6 @@ jobs:
           test "${{ steps.sonar.outputs.run-id }}" = "1"
           test -f test/fixtures/reports/health.json
           grep -q '"phpstan.level": 8' test/fixtures/reports/sonar-metrics.json
+          grep -q '"name": "syft"' test/fixtures/reports/health.json
+          grep -q '"format": "cyclonedx-json"' test/fixtures/reports/health.json
+          grep -q '"format": "sonar-stack"' test/fixtures/reports/health.json

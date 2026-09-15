@@ -62,7 +62,7 @@ test('happy path: writes health.json with extras, uploads, sets outputs and a su
     assert.equal(manifest.repository, 'ux-nl/sonar');
     assert.equal(manifest.workflow_run_id, 4242);
     assert.equal(manifest.workspace, `${dir}/`);
-    assert.deepEqual(manifest.tools.map((t) => [t.name, t.format]).sort(), [['pest', 'clover'], ['pest', 'junit'], ['phpstan', 'phpstan-json'], ['pint', 'checkstyle'], ['sonar', 'sonar-metrics']].sort());
+    assert.deepEqual(manifest.tools.map((t) => [t.name, t.format]).sort(), [['pest', 'clover'], ['pest', 'junit'], ['phpstan', 'phpstan-json'], ['pint', 'checkstyle'], ['sonar', 'sonar-metrics'], ['sonar', 'sonar-stack'], ['syft', 'cyclonedx-json']].sort());
     assert.deepEqual(JSON.parse(readFileSync(path.join(dir, 'reports/sonar-metrics.json'), 'utf8')), { 'phpstan.level': 8 });
     assert.equal(calls.at(-1).url, 'https://sonar.example.com/api/ingest');
     const outputs = readFileSync(path.join(dir, 'GITHUB_OUTPUT'), 'utf8');

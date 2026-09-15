@@ -1,0 +1,432 @@
+# Sonar reusable workflow. Called from a repository's .github/workflows/sonar.yml (see templates/caller.yml).
+# Detects the stack, runs the matching tools on ubuntu-latest, builds a CycloneDX inventory and sends
+# everything to Sonar. Every job that produces reports writes into reports/ and uploads reports-<job>.
+#
+# Report steps run `set +e` before the tool: the default shell is `bash -e`, which would abort the
+# step on a non-zero exit before the `<report>.exit` sidecar that records that exit code is written.
+name: Sonar (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      php-version:
+        description: PHP version for setup-php. Default is detected from composer.lock's platform override, else the highest minor satisfying composer.json's require.php (capped at 8.4), else 8.4.
+        type: string
+        required: false
+        default: ''
+      node-version:
+        description: Node version for setup-node. Default is detected from .nvmrc, else the highest major satisfying engines.node (capped at 22), else 22.
+        type: string
+        required: false
+        default: ''
+      skip:
+        description: 'Comma-separated job ids to skip, spaces ignored, e.g. "rector, tests": inventory, secrets, lint, static (PHPStan), rector, tests, security, dependencies, js-lint, js-tests, js-unused.'
+        type: string
+        required: false
+        default: ''
+      sonar-url:
+        description: Sonar base URL. Leave empty for the action default (https://sonar.ux.nl).
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  GITLEAKS_VERSION: '8.30.1'
+  GITLEAKS_SHA256: '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+
+jobs:
+  detect:
+    name: Detect stack
+    runs-on: ubuntu-latest
+    outputs:
+      php: ${{ steps.detect.outputs.php }}
+      laravel: ${{ steps.detect.outputs.laravel }}
+      wordpress: ${{ steps.detect.outputs.wordpress }}
+      node: ${{ steps.detect.outputs.node }}
+      static: ${{ steps.detect.outputs.static }}
+      pint: ${{ steps.detect.outputs.pint }}
+      phpstan: ${{ steps.detect.outputs.phpstan }}
+      rector: ${{ steps.detect.outputs.rector }}
+      pest: ${{ steps.detect.outputs.pest }}
+      phpunit: ${{ steps.detect.outputs.phpunit }}
+      eslint: ${{ steps.detect.outputs.eslint }}
+      vitest: ${{ steps.detect.outputs.vitest }}
+      jest: ${{ steps.detect.outputs.jest }}
+      knip: ${{ steps.detect.outputs.knip }}
+      package-manager: ${{ steps.detect.outputs.package-manager }}
+      php-version: ${{ inputs.php-version || steps.detect.outputs.php-version }}
+      node-version: ${{ inputs.node-version || steps.detect.outputs.node-version }}
+      kind: ${{ steps.detect.outputs.kind }}
+      skip: ${{ steps.skip.outputs.list }}
+    steps:
+      # Workflow expressions have no replace(), so the skip list is normalised
+      # once here (whitespace stripped, comma-wrapped) and every job guards on
+      # contains(needs.detect.outputs.skip, ',<job>,').
+      - id: skip
+        env:
+          SKIP: ${{ inputs.skip }}
+        run: printf 'list=,%s,\n' "$(printf '%s' "$SKIP" | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - id: detect
+        uses: ux-nl/sonar-action/detect@v1.1-reusable-workflow # SONAR_ACTION_REF
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-detect
+          path: reports/
+          if-no-files-found: ignore
+
+  inventory:
+    name: Inventory (syft)
+    needs: detect
+    runs-on: ubuntu-latest
+    # !cancelled() suppresses implicit success() so this runs even if detect failed
+    if: ${{ !cancelled() && !contains(needs.detect.outputs.skip, ',inventory,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: reports/sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-inventory
+          path: reports/
+          if-no-files-found: ignore
+
+  secrets:
+    name: Secrets (gitleaks)
+    needs: detect
+    runs-on: ubuntu-latest
+    # !cancelled() suppresses implicit success() so this runs even if detect failed
+    if: ${{ !cancelled() && !contains(needs.detect.outputs.skip, ',secrets,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - name: Install gitleaks
+        run: |
+          curl -sSL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks && rm gitleaks.tar.gz
+      - run: set +e; ./gitleaks dir . --report-format sarif --report-path reports/gitleaks.sarif --exit-code 0 --redact --no-banner; echo $? > reports/gitleaks.sarif.exit
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-secrets
+          path: reports/
+          if-no-files-found: ignore
+
+  lint:
+    name: Pint
+    needs: detect
+    runs-on: ubuntu-latest
+    if: ${{ needs.detect.outputs.php == 'true' && needs.detect.outputs.pint == 'true' && !contains(needs.detect.outputs.skip, ',lint,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ needs.detect.outputs.php-version }}
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: set +e; vendor/bin/pint --test --format=checkstyle > reports/pint.xml; echo $? > reports/pint.xml.exit
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-lint
+          path: reports/
+          if-no-files-found: ignore
+      - run: vendor/bin/pint --test
+
+  static:
+    name: PHPStan and type coverage
+    needs: detect
+    runs-on: ubuntu-latest
+    if: ${{ needs.detect.outputs.php == 'true' && needs.detect.outputs.phpstan == 'true' && !contains(needs.detect.outputs.skip, ',static,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ needs.detect.outputs.php-version }}
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: set +e; vendor/bin/phpstan analyse --no-progress --error-format=json > reports/phpstan.json; echo $? > reports/phpstan.json.exit
+        continue-on-error: true
+      - run: set +e; vendor/bin/pest --type-coverage --type-coverage-json=reports/type-coverage.json; echo $? > reports/type-coverage.json.exit
+        if: needs.detect.outputs.pest == 'true'
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-static
+          path: reports/
+          if-no-files-found: ignore
+      - run: vendor/bin/phpstan analyse --no-progress --error-format=github
+
+  rector:
+    name: Rector
+    needs: detect
+    runs-on: ubuntu-latest
+    if: ${{ needs.detect.outputs.php == 'true' && needs.detect.outputs.rector == 'true' && !contains(needs.detect.outputs.skip, ',rector,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ needs.detect.outputs.php-version }}
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: set +e; vendor/bin/rector process --dry-run --output-format=json > reports/rector.json; echo $? > reports/rector.json.exit
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-rector
+          path: reports/
+          if-no-files-found: ignore
+
+  tests:
+    name: PHP tests
+    needs: detect
+    runs-on: ubuntu-latest
+    if: ${{ needs.detect.outputs.php == 'true' && (needs.detect.outputs.pest == 'true' || needs.detect.outputs.phpunit == 'true') && !contains(needs.detect.outputs.skip, ',tests,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: ${{ needs.detect.outputs.php-version }}
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite, bcmath, intl, gd, fileinfo
+          coverage: pcov
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp -n .env.example .env && php artisan key:generate
+        if: needs.detect.outputs.laravel == 'true' && hashFiles('.env.example') != ''
+      - run: set +e; vendor/bin/pest --ci --coverage --coverage-clover=reports/clover.xml --log-junit=reports/junit.xml; echo $? > reports/junit.xml.exit
+        if: needs.detect.outputs.pest == 'true'
+        continue-on-error: true
+      - run: set +e; vendor/bin/phpunit --coverage-clover=reports/clover.xml --log-junit=reports/junit.xml; echo $? > reports/junit.xml.exit
+        if: needs.detect.outputs.pest != 'true'
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-tests
+          path: reports/
+          if-no-files-found: ignore
+      - run: test "$(cat reports/junit.xml.exit)" = "0"
+
+  security:
+    name: Security
+    needs: detect
+    runs-on: ubuntu-latest
+    if: ${{ (needs.detect.outputs.php == 'true' || needs.detect.outputs.node == 'true') && !contains(needs.detect.outputs.skip, ',security,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        if: needs.detect.outputs.php == 'true'
+        with:
+          php-version: ${{ needs.detect.outputs.php-version }}
+          coverage: none
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: hashFiles('package-lock.json') != ''
+        with:
+          node-version: ${{ needs.detect.outputs.node-version }}
+      # `composer audit --locked` reads composer.lock, so no vendor tree is needed.
+      - run: set +e; composer audit --locked --format=json --no-interaction > reports/composer-audit.json; echo $? > reports/composer-audit.json.exit
+        if: needs.detect.outputs.php == 'true'
+        continue-on-error: true
+      - run: set +e; npm audit --json > reports/npm-audit.json; echo $? > reports/npm-audit.json.exit
+        if: hashFiles('package-lock.json') != ''
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-security
+          path: reports/
+          if-no-files-found: ignore
+
+  dependencies:
+    name: Dependency health
+    needs: detect
+    runs-on: ubuntu-latest
+    if: ${{ (needs.detect.outputs.php == 'true' || needs.detect.outputs.node == 'true') && !contains(needs.detect.outputs.skip, ',dependencies,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        if: needs.detect.outputs.php == 'true'
+        with:
+          php-version: ${{ needs.detect.outputs.php-version }}
+          coverage: none
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: hashFiles('package-lock.json') != ''
+        with:
+          node-version: ${{ needs.detect.outputs.node-version }}
+      - run: composer install --no-interaction --prefer-dist --no-progress
+        if: needs.detect.outputs.php == 'true'
+      # `outdated` exits non-zero whenever anything is outdated, which is normal; only record it.
+      - run: set +e; composer outdated --direct --format=json --no-interaction > reports/composer-outdated.json; echo $? > reports/composer-outdated.json.exit
+        if: needs.detect.outputs.php == 'true'
+        continue-on-error: true
+      - run: |
+          set +e
+          npm ci --ignore-scripts
+          npm outdated --json > reports/npm-outdated.json; echo $? > reports/npm-outdated.json.exit
+        if: hashFiles('package-lock.json') != ''
+        continue-on-error: true
+      - run: cp -n .env.example .env && php artisan key:generate
+        if: needs.detect.outputs.laravel == 'true' && hashFiles('.env.example') != ''
+      - run: php artisan about --json > reports/about.json
+        if: needs.detect.outputs.laravel == 'true'
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-dependencies
+          path: reports/
+          if-no-files-found: ignore
+
+  js-lint:
+    name: ESLint
+    needs: detect
+    runs-on: ubuntu-latest
+    if: ${{ needs.detect.outputs.node == 'true' && needs.detect.outputs.eslint == 'true' && !contains(needs.detect.outputs.skip, ',js-lint,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ needs.detect.outputs.node-version }}
+      - name: Install dependencies
+        run: |
+          case "${{ needs.detect.outputs.package-manager }}" in
+            pnpm) npm install -g pnpm@10 && pnpm install --frozen-lockfile ;;
+            yarn) corepack enable && yarn install --frozen-lockfile ;;
+            *) if [ -f package-lock.json ]; then npm ci --ignore-scripts; else npm install --ignore-scripts; fi ;;
+          esac
+      - run: set +e; npm install --no-save @microsoft/eslint-formatter-sarif && npx eslint . -f @microsoft/eslint-formatter-sarif -o reports/eslint.sarif; echo $? > reports/eslint.sarif.exit
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-js-lint
+          path: reports/
+          if-no-files-found: ignore
+      - run: test "$(cat reports/eslint.sarif.exit)" = "0"
+
+  js-tests:
+    name: JS tests
+    needs: detect
+    runs-on: ubuntu-latest
+    if: ${{ needs.detect.outputs.node == 'true' && (needs.detect.outputs.vitest == 'true' || needs.detect.outputs.jest == 'true') && !contains(needs.detect.outputs.skip, ',js-tests,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ needs.detect.outputs.node-version }}
+      - name: Install dependencies
+        run: |
+          case "${{ needs.detect.outputs.package-manager }}" in
+            pnpm) npm install -g pnpm@10 && pnpm install --frozen-lockfile ;;
+            yarn) corepack enable && yarn install --frozen-lockfile ;;
+            *) if [ -f package-lock.json ]; then npm ci --ignore-scripts; else npm install --ignore-scripts; fi ;;
+          esac
+      # Coverage needs a provider package installed; without one vitest exits 1 before any test runs.
+      - run: |
+          set +e
+          COVERAGE=""
+          if [ -d node_modules/@vitest/coverage-v8 ] || [ -d node_modules/@vitest/coverage-istanbul ]; then
+            COVERAGE="--coverage --coverage.reporter=lcov --coverage.reportsDirectory=reports/coverage"
+          fi
+          npx vitest run --reporter=default --reporter=junit --outputFile.junit=reports/vitest-junit.xml $COVERAGE
+          echo $? > reports/vitest-junit.xml.exit
+          test -f reports/coverage/lcov.info && mv reports/coverage/lcov.info reports/vitest-lcov.info
+          rm -rf reports/coverage
+        if: needs.detect.outputs.vitest == 'true'
+        continue-on-error: true
+      # jest-junit is installed ad hoc, like js-lint's SARIF formatter, so a repository that
+      # only depends on jest still produces a JUnit report.
+      - run: |
+          set +e
+          npm install --no-save jest-junit
+          npx jest --ci --reporters=default --reporters=jest-junit --coverage --coverageReporters=lcov --coverageDirectory=reports/coverage
+          echo $? > reports/jest-junit.xml.exit
+          test -f reports/coverage/lcov.info && mv reports/coverage/lcov.info reports/jest-lcov.info
+          rm -rf reports/coverage
+        if: needs.detect.outputs.vitest != 'true'
+        env:
+          JEST_JUNIT_OUTPUT_DIR: reports
+          JEST_JUNIT_OUTPUT_NAME: jest-junit.xml
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-js-tests
+          path: reports/
+          if-no-files-found: ignore
+      # exactly one of vitest/jest ran, so exactly one *-junit.xml.exit sidecar exists
+      - run: for f in reports/*-junit.xml.exit; do test "$(cat "$f")" = "0"; done
+
+  js-unused:
+    name: Knip
+    needs: detect
+    runs-on: ubuntu-latest
+    if: ${{ needs.detect.outputs.node == 'true' && needs.detect.outputs.knip == 'true' && !contains(needs.detect.outputs.skip, ',js-unused,') }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - run: mkdir -p reports
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: ${{ needs.detect.outputs.node-version }}
+      - name: Install dependencies
+        run: |
+          case "${{ needs.detect.outputs.package-manager }}" in
+            pnpm) npm install -g pnpm@10 && pnpm install --frozen-lockfile ;;
+            yarn) corepack enable && yarn install --frozen-lockfile ;;
+            *) if [ -f package-lock.json ]; then npm ci --ignore-scripts; else npm install --ignore-scripts; fi ;;
+          esac
+      - run: set +e; npx knip --reporter json > reports/knip.json; echo $? > reports/knip.json.exit
+        continue-on-error: true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: reports-js-unused
+          path: reports/
+          if-no-files-found: ignore
+
+  sonar:
+    name: Sonar
+    needs: [detect, inventory, secrets, lint, static, rector, tests, security, dependencies, js-lint, js-tests, js-unused]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          pattern: reports-*
+          path: reports
+          merge-multiple: true
+      - uses: ux-nl/sonar-action@v1.1-reusable-workflow # SONAR_ACTION_REF
+        with:
+          sonar-url: ${{ inputs.sonar-url }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: sonar-reports
+          path: reports/

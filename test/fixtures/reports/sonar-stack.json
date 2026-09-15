@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "stack": ["php", "laravel"],
+  "kind": "app",
+  "runtimes": { "php": "8.4", "laravel": "12.10.0", "node": null, "wordpress": null },
+  "package_managers": ["composer"]
+}

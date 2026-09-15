@@ -1,0 +1,58 @@
+name: Sonar detect
+description: Detect the stack of a checkout (PHP, Laravel, WordPress, Node, static) and expose it as job outputs plus reports/sonar-stack.json.
+author: ux-nl
+branding:
+  icon: search
+  color: blue
+
+inputs:
+  workspace:
+    description: Path of the checkout to inspect.
+    required: false
+    default: ${{ github.workspace }}
+  reports-dir:
+    description: Directory (relative to the workspace) where sonar-stack.json is written.
+    required: false
+    default: reports
+
+outputs:
+  php:
+    description: "'true' when composer.json exists."
+  laravel:
+    description: "'true' when laravel/framework is installed or an artisan file exists."
+  wordpress:
+    description: "'true' for Bedrock (roots/wordpress, johnpbloch/wordpress-core, wordpress/core), wp-config.php or a theme style.css header."
+  node:
+    description: "'true' when package.json exists."
+  static:
+    description: "'true' when neither php nor node and an index.html exists at the root, public/ or dist/."
+  pint:
+    description: "'true' when laravel/pint is installed."
+  phpstan:
+    description: "'true' when phpstan/phpstan is installed and a phpstan.neon* file exists."
+  rector:
+    description: "'true' when rector/rector is installed."
+  pest:
+    description: "'true' when pestphp/pest is installed."
+  phpunit:
+    description: "'true' when phpunit/phpunit is installed."
+  eslint:
+    description: "'true' when eslint is in the Node lockfile."
+  vitest:
+    description: "'true' when vitest is in the Node lockfile."
+  jest:
+    description: "'true' when jest is in the Node lockfile."
+  knip:
+    description: "'true' when knip is in the Node lockfile and a knip.json* file exists."
+  package-manager:
+    description: npm, pnpm or yarn from the lockfile present; empty without package.json.
+  php-version:
+    description: PHP version to install. composer.lock's platform override, else the highest PHP minor satisfying composer.json require.php capped at 8.4, else 8.4.
+  node-version:
+    description: Node version to install. .nvmrc major, else the highest major satisfying engines.node capped at 22, else 22.
+  kind:
+    description: app, package, site or other.
+
+runs:
+  using: node24
+  main: index.js
